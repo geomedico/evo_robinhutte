@@ -517,6 +517,166 @@ const RobihuettePage = () => {
   );
 };
 
+// ==================== BOOKING CALENDAR COMPONENT ====================
+const BookingCalendar = ({ selectedDate, onSelectDate, busyDates }) => {
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return new Date(tomorrow.getFullYear(), tomorrow.getMonth(), 1);
+  });
+
+  const MONTHS_DE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  const DAYS_DE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const days = [];
+    
+    // Get the day of week (0=Sunday, but we want 0=Monday)
+    let startDay = firstDay.getDay() - 1;
+    if (startDay < 0) startDay = 6;
+    
+    // Add empty cells for days before the first
+    for (let i = 0; i < startDay; i++) {
+      days.push(null);
+    }
+    
+    // Add all days of the month
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push(new Date(year, month, i));
+    }
+    
+    return days;
+  };
+
+  const formatDateString = (date) => {
+    if (!date) return null;
+    return date.toISOString().split('T')[0];
+  };
+
+  const isDateBusy = (date) => {
+    if (!date) return false;
+    const dateStr = formatDateString(date);
+    return busyDates.some(b => b.booking_date === dateStr);
+  };
+
+  const isDatePast = (date) => {
+    if (!date) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return date < tomorrow;
+  };
+
+  const isDateSelected = (date) => {
+    if (!date || !selectedDate) return false;
+    return formatDateString(date) === selectedDate;
+  };
+
+  const handlePrevMonth = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minMonth = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), 1);
+    const newMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+    if (newMonth >= minMonth) {
+      setCurrentMonth(newMonth);
+    }
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
+
+  const days = getDaysInMonth(currentMonth);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const canGoPrev = currentMonth > new Date(tomorrow.getFullYear(), tomorrow.getMonth(), 1);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <button 
+          onClick={handlePrevMonth} 
+          disabled={!canGoPrev}
+          className={`p-2 rounded-lg ${canGoPrev ? 'hover:bg-gray-100' : 'opacity-30 cursor-not-allowed'}`}
+        >
+          <ChevronLeft size={20} />
+        </button>
+        <h3 className="text-lg font-semibold text-gray-900">
+          {MONTHS_DE[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+        </h3>
+        <button onClick={handleNextMonth} className="p-2 rounded-lg hover:bg-gray-100">
+          <ChevronRight size={20} />
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {DAYS_DE.map(day => (
+          <div key={day} className="text-center text-xs font-medium text-gray-500 py-2">{day}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((date, index) => {
+          if (!date) {
+            return <div key={`empty-${index}`} className="h-10"></div>;
+          }
+          
+          const isPast = isDatePast(date);
+          const isBusy = isDateBusy(date);
+          const isSelected = isDateSelected(date);
+          const dayNum = date.getDate();
+          
+          return (
+            <button
+              key={formatDateString(date)}
+              onClick={() => !isPast && !isBusy && onSelectDate(formatDateString(date))}
+              disabled={isPast || isBusy}
+              className={`h-10 rounded-lg text-sm font-medium transition-all relative
+                ${isPast ? 'text-gray-300 cursor-not-allowed' : ''}
+                ${isBusy && !isPast ? 'bg-red-100 text-red-400 cursor-not-allowed' : ''}
+                ${!isPast && !isBusy && !isSelected ? 'text-gray-900 hover:bg-amber-50 hover:text-amber-600' : ''}
+                ${isSelected ? 'bg-amber-500 text-white shadow-md' : ''}
+              `}
+              data-testid={`calendar-day-${dayNum}`}
+            >
+              {dayNum}
+              {isBusy && !isPast && (
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-red-400 rounded-full"></span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100 text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-amber-500 rounded"></div>
+          <span className="text-gray-600">Ausgewählt</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-red-100 rounded relative">
+            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-red-400 rounded-full"></span>
+          </div>
+          <span className="text-gray-600">Belegt</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>
+          <span className="text-gray-600">Verfügbar</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ==================== BOOKING PAGE ====================
 const BookingPage = () => {
   const { user, token } = useAuth();
@@ -525,6 +685,8 @@ const BookingPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [price, setPrice] = useState(null);
+  const [busyDates, setBusyDates] = useState([]);
+  const [calendarLoading, setCalendarLoading] = useState(true);
   
   const [form, setForm] = useState({
     booking_date: "",
@@ -542,6 +704,35 @@ const BookingPage = () => {
     }
   }, [user, navigate]);
 
+  // Seed bookings and load availability on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Seed demo bookings first
+        await axios.post(`${API}/bookings/seed`);
+        
+        // Load current and next month availability
+        const today = new Date();
+        const currentMonth = today.getMonth() + 1;
+        const currentYear = today.getFullYear();
+        const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+        const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+        
+        const [curr, next] = await Promise.all([
+          axios.get(`${API}/bookings/availability/${currentYear}/${currentMonth}`),
+          axios.get(`${API}/bookings/availability/${nextYear}/${nextMonth}`)
+        ]);
+        
+        setBusyDates([...curr.data.bookings, ...next.data.bookings]);
+      } catch (err) {
+        console.error("Error loading availability:", err);
+      } finally {
+        setCalendarLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
   useEffect(() => {
     if (form.booking_date && form.time_block) {
       axios.post(`${API}/bookings/check-price?booking_date=${form.booking_date}&time_block=${form.time_block}&cleaning=${form.cleaning_addon}&token=${token}`)
@@ -553,6 +744,11 @@ const BookingPage = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const handleDateSelect = (dateStr) => {
+    setForm(prev => ({ ...prev, booking_date: dateStr }));
+    setError("");
   };
 
   const checkAvailability = async () => {
@@ -619,21 +815,41 @@ const BookingPage = () => {
           {step === 1 && (
             <div className="space-y-6">
               <h2 className="text-xl font-semibold">Datum & Zeit wählen</h2>
+              
+              {/* Calendar */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Datum</label>
-                <input type="date" name="booking_date" value={form.booking_date} onChange={handleChange} min={new Date().toISOString().split('T')[0]} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent" />
+                <label className="block text-sm font-medium text-gray-700 mb-3">Wähle ein Datum (ab morgen)</label>
+                {calendarLoading ? (
+                  <div className="h-64 flex items-center justify-center bg-gray-50 rounded-xl">
+                    <div className="text-gray-500">Kalender wird geladen...</div>
+                  </div>
+                ) : (
+                  <BookingCalendar 
+                    selectedDate={form.booking_date} 
+                    onSelectDate={handleDateSelect}
+                    busyDates={busyDates}
+                  />
+                )}
+                {form.booking_date && (
+                  <p className="mt-3 text-sm text-amber-600 font-medium">
+                    Ausgewählt: {new Date(form.booking_date).toLocaleDateString('de-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                )}
               </div>
+
+              {/* Time block selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Zeitblock</label>
                 <div className="grid grid-cols-2 gap-4">
                   {["4h", "24h"].map(block => (
-                    <button key={block} type="button" onClick={() => setForm(prev => ({ ...prev, time_block: block }))} className={`p-4 border rounded-lg text-left ${form.time_block === block ? 'border-amber-500 bg-amber-50' : 'border-gray-200'}`}>
+                    <button key={block} type="button" onClick={() => setForm(prev => ({ ...prev, time_block: block }))} className={`p-4 border rounded-lg text-left ${form.time_block === block ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:border-gray-300'}`}>
                       <span className="block font-semibold">{block === "4h" ? "4 Stunden" : "24 Stunden"}</span>
                       <span className="text-sm text-gray-500">{block === "4h" ? "Flexible Startzeit" : "09:00 - 09:00"}</span>
                     </button>
                   ))}
                 </div>
               </div>
+
               {form.time_block === "4h" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Startzeit</label>
@@ -644,7 +860,8 @@ const BookingPage = () => {
                   </select>
                 </div>
               )}
-              {price && (
+
+              {price && form.booking_date && (
                 <div className="bg-amber-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Geschätzter Preis:</p>
                   <p className="text-2xl font-bold text-amber-600">CHF {price.total}</p>

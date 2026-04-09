@@ -233,9 +233,58 @@ async def get_availability(year: int, month: int):
     bookings = list(db.bookings.find({
         "booking_date": {"$gte": start, "$lt": end},
         "status": {"$nin": ["cancelled"]}
-    }, {"_id": 0, "booking_date": 1, "start_time": 1, "time_block": 1}))
+    }, {"_id": 0, "booking_date": 1, "start_time": 1, "time_block": 1, "event_type": 1}))
     
     return {"bookings": bookings}
+
+@app.post("/api/bookings/seed")
+async def seed_bookings():
+    """Seed sample bookings for demo purposes"""
+    from datetime import datetime, timedelta
+    
+    # Clear existing seed bookings
+    db.bookings.delete_many({"is_seed": True})
+    
+    today = datetime.now()
+    seed_bookings = []
+    
+    # Add some busy dates in the coming weeks
+    busy_offsets = [3, 5, 7, 10, 12, 14, 17, 19, 21, 24, 28]
+    event_types = ["Geburtstag", "Familienfeier", "Vereinsanlass", "Firmenanlass"]
+    
+    for i, offset in enumerate(busy_offsets):
+        booking_date = (today + timedelta(days=offset)).strftime("%Y-%m-%d")
+        time_block = "24h" if offset % 3 == 0 else "4h"
+        start_time = "09:00" if time_block == "24h" else ["10:00", "14:00", "18:00"][i % 3]
+        
+        seed_bookings.append({
+            "reference_number": f"SEED-{offset:04d}",
+            "user_id": "seed_user",
+            "user_name": "Demo User",
+            "user_email": "demo@example.ch",
+            "booking_date": booking_date,
+            "start_time": start_time,
+            "end_time": "09:00" if time_block == "24h" else str(int(start_time.split(":")[0]) + 4).zfill(2) + ":00",
+            "time_block": time_block,
+            "event_type": event_types[i % len(event_types)],
+            "expected_guests": 20 + (i * 5) % 30,
+            "cleaning_addon": i % 2 == 0,
+            "special_requests": None,
+            "rental_price": 150 if time_block == "24h" else 80,
+            "cleaning_price": 60 if i % 2 == 0 else 0,
+            "total_price": (150 if time_block == "24h" else 80) + (60 if i % 2 == 0 else 0),
+            "deposit": 250,
+            "is_member": True,
+            "status": "confirmed",
+            "payment_status": "paid",
+            "is_seed": True,
+            "created_at": datetime.utcnow().isoformat()
+        })
+    
+    if seed_bookings:
+        db.bookings.insert_many(seed_bookings)
+    
+    return {"message": f"{len(seed_bookings)} Demo-Buchungen erstellt", "dates": [b["booking_date"] for b in seed_bookings]}
 
 @app.post("/api/bookings/check-price")
 async def check_price(
