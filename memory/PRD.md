@@ -24,7 +24,7 @@ Build a functional draft website for EVO (Elternvereinigung Oberglatt) according
 2. **Über uns** - Board members / Vorstand page
 3. **Aktuell** - Upcoming events list
 4. **Robihütte** - Info, pricing table, booking CTA
-5. **Robihütte Buchen** - 3-step booking wizard
+5. **Robihütte Buchen** - 3-step booking wizard with visual calendar
 6. **Blog** - Blog posts / Rückblick
 7. **Kontakt** - Contact form
 8. **Meine Buchungen** - User's booking history
@@ -35,6 +35,12 @@ Build a functional draft website for EVO (Elternvereinigung Oberglatt) according
 ### Features
 - ✅ User registration & login (JWT-based)
 - ✅ Member vs External pricing differentiation
+- ✅ **Visual Booking Calendar** with:
+  - Busy/Free date visualization (red = busy, white = available)
+  - Calendar starts from tomorrow (today's date disabled)
+  - Demo bookings seeded for preview
+  - Month navigation
+  - Legend: Ausgewählt / Belegt / Verfügbar
 - ✅ Robihütte booking system with:
   - 4h and 24h time blocks
   - Weekday vs Weekend pricing
