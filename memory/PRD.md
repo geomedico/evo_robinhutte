@@ -1,40 +1,138 @@
-# EVO Elternvereinigung Oberglatt - Homepage Design Prototype
+# EVO Elternvereinigung Oberglatt - Website Draft
 
-**Project:** Design template for Wix implementation
+**Project:** Full-stack website for Elternvereinigung Oberglatt
 **Date:** January 2026
-**Status:** Design Prototype Complete
+**Status:** MVP Complete ✅
 
 ---
 
 ## Original Problem Statement
-Create improved homepage sections for the EVO (Elternvereinigung Oberglatt) website. The client has an existing Wix site and needs a visual design reference for implementing new sections.
+Build a functional draft website for EVO (Elternvereinigung Oberglatt) according to their blueprint, including homepage, login/logout, member registration, and Robihütte booking system with business logic.
 
 ## User Requirements
-- Platform: Wix only
+- Platform: Design prototype (can be used as Wix reference)
 - Design Style: Modern, minimalist, family-friendly
-- Colors: Based on existing site (warm amber/orange accents)
-- Output: Design prototype with copyable image URLs
+- Business Logic: Robihütte booking with pricing rules from blueprint
+- Authentication: Member registration & login
+
+---
 
 ## What's Been Implemented
 
-### Homepage Sections (All Static Demo)
-1. **Header** - Logo, navigation, CTA button
-2. **Hero Section** - Full-width image with headline and two CTAs
-3. **Mission Section** - "Wofür wir stehen" with 3 value cards
-4. **Events Section** - "Nächste Anlässe" with 3 event cards
-5. **Robihütte Section** - Cabin rental teaser with features
-6. **Team Section** - "Der Vorstand" with 3 board member cards
-7. **CTA Band** - "Mitmachen bei der EVO" with 3 action buttons
-8. **Newsletter Section** - Email signup
-9. **Footer** - Contact, links, social icons
+### Pages
+1. **Homepage** - Hero, Mission (Wofür wir stehen), Events teaser, Robihütte teaser, Team, CTA Band, Newsletter
+2. **Über uns** - Board members / Vorstand page
+3. **Aktuell** - Upcoming events list
+4. **Robihütte** - Info, pricing table, booking CTA
+5. **Robihütte Buchen** - 3-step booking wizard
+6. **Blog** - Blog posts / Rückblick
+7. **Kontakt** - Contact form
+8. **Meine Buchungen** - User's booking history
+9. **Login** - User authentication
+10. **Mitglied werden** - Registration
+11. **Legal pages** - Impressum, Datenschutz, AGB
 
-## Tech Stack (Prototype)
-- React + Tailwind CSS
-- Lucide React Icons
-- Unsplash/Pexels for placeholder images
+### Features
+- ✅ User registration & login (JWT-based)
+- ✅ Member vs External pricing differentiation
+- ✅ Robihütte booking system with:
+  - 4h and 24h time blocks
+  - Weekday vs Weekend pricing
+  - Cleaning addon option
+  - Availability checking
+  - Booking confirmation
+- ✅ Contact form submission
+- ✅ Newsletter subscription
+- ✅ Responsive design (desktop & mobile)
+
+### Pricing Logic (from Blueprint)
+| Time Block | Day | Member | External |
+|------------|-----|--------|----------|
+| 4 Stunden | All | CHF 80 | CHF 120 |
+| 24 Stunden | Mo-Do | CHF 150 | CHF 230 |
+| 24 Stunden | Fr-So | CHF 200 | CHF 350 |
+| Reinigung | - | +CHF 60 | +CHF 60 |
+| Kaution | - | CHF 250 | CHF 250 |
+
+---
+
+## Tech Stack
+- **Frontend:** React + Tailwind CSS + React Router
+- **Backend:** FastAPI (Python)
+- **Database:** MongoDB
+- **Auth:** JWT tokens + bcrypt
+
+---
+
+## API Endpoints
+
+### Auth
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `GET /api/auth/me` - Get current user
+
+### Bookings
+- `GET /api/bookings/availability/{year}/{month}` - Monthly availability
+- `POST /api/bookings/check-price` - Calculate price
+- `POST /api/bookings/check-availability` - Check slot availability
+- `POST /api/bookings` - Create booking
+- `GET /api/bookings/my` - User's bookings
+
+### Content
+- `GET /api/board-members` - Board members list
+- `GET /api/events` - Events list
+- `GET /api/blog` - Blog posts
+- `GET /api/pricing` - Robihütte pricing
+
+### Contact
+- `POST /api/contact` - Contact form submission
+- `POST /api/newsletter` - Newsletter subscription
+
+---
+
+## Prioritized Backlog
+
+### P0 - Done ✅
+- Homepage with all sections
+- User authentication
+- Robihütte booking system
+- Pricing logic implementation
+
+### P1 - Next Phase
+- Admin dashboard for managing bookings
+- Email notifications (booking confirmation)
+- Calendar integration
+- iCal export for bookings
+
+### P2 - Future
+- Payment integration (Stripe)
+- Automatic invoice generation
+- Online payment for bookings
+- WhatsApp integration for notifications
+
+---
+
+## User Personas
+
+1. **Eltern (Parents)**
+   - Want to book Robihütte for kids' birthdays
+   - Need to see upcoming events
+   - May want to become members
+
+2. **Mitglieder (Members)**
+   - Get discounted pricing
+   - Can book Robihütte online
+   - Receive newsletter
+
+3. **Vorstand (Board)**
+   - Manage bookings (future admin)
+   - Update events and content
+   - Handle contact inquiries
+
+---
 
 ## Next Steps
-- User copies design to Wix
-- Replace placeholder images with real photos
-- Connect forms to actual Wix automations
-- Set up CMS collections per blueprint
+1. Deploy to production or use as Wix reference
+2. Add real images (replace Unsplash placeholders)
+3. Set up email service for notifications
+4. Consider admin dashboard for Vorstand
