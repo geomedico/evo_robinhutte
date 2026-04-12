@@ -117,6 +117,10 @@ def verify_password(password: str, hashed: str) -> bool:
 
 PRICING_RULES = {
     "4h": {"all": {"member": 80, "external": 120}},
+    "12h": {
+        "weekday": {"member": 120, "external": 180},
+        "weekend": {"member": 150, "external": 270},
+    },
     "24h": {
         "weekday": {"member": 150, "external": 230},
         "weekend": {"member": 200, "external": 350},
@@ -125,20 +129,44 @@ PRICING_RULES = {
 CLEANING_PRICE = 60
 DEPOSIT = 250
 BUFFER_HOURS = 1.5
+MAX_ADVANCE_MONTHS = 3  # Maximum booking 3 months in advance
+
+# Swiss public holidays (Zurich Canton) - approximate dates for validation
+SWISS_HOLIDAYS_2026 = [
+    "2026-01-01",  # Neujahr
+    "2026-01-02",  # Berchtoldstag
+    "2026-04-03",  # Karfreitag
+    "2026-04-06",  # Ostermontag
+    "2026-05-01",  # Tag der Arbeit
+    "2026-05-14",  # Auffahrt
+    "2026-05-25",  # Pfingstmontag
+    "2026-08-01",  # Nationalfeiertag
+    "2026-12-25",  # Weihnachten
+    "2026-12-26",  # Stephanstag
+]
+
+def is_weekend_or_holiday(booking_date: str) -> bool:
+    """Check if date is weekend (Fr-So) or public holiday"""
+    dt = datetime.strptime(booking_date, "%Y-%m-%d")
+    day_of_week = dt.weekday()  # 0=Monday, 6=Sunday
+    # Weekend = Friday(4), Saturday(5), Sunday(6)
+    if day_of_week >= 4:
+        return True
+    # Check holidays
+    if booking_date in SWISS_HOLIDAYS_2026:
+        return True
+    return False
 
 def calculate_price(time_block: str, booking_date: str, is_member: bool, cleaning: bool):
     """Calculate booking price based on rules"""
-    dt = datetime.strptime(booking_date, "%Y-%m-%d")
-    day_of_week = dt.weekday()  # 0=Monday, 6=Sunday
+    is_weekend = is_weekend_or_holiday(booking_date)
     
     if time_block == "4h":
         base = PRICING_RULES["4h"]["all"]
+    elif time_block == "12h":
+        base = PRICING_RULES["12h"]["weekend"] if is_weekend else PRICING_RULES["12h"]["weekday"]
     else:  # 24h
-        # Weekend = Friday(4), Saturday(5), Sunday(6)
-        if day_of_week >= 4:
-            base = PRICING_RULES["24h"]["weekend"]
-        else:
-            base = PRICING_RULES["24h"]["weekday"]
+        base = PRICING_RULES["24h"]["weekend"] if is_weekend else PRICING_RULES["24h"]["weekday"]
     
     rental = base["member"] if is_member else base["external"]
     cleaning_cost = CLEANING_PRICE if cleaning else 0
@@ -148,11 +176,38 @@ def calculate_price(time_block: str, booking_date: str, is_member: bool, cleanin
         "cleaning_price": cleaning_cost,
         "total": rental + cleaning_cost,
         "deposit": DEPOSIT,
-        "is_weekend": day_of_week >= 4
+        "is_weekend": is_weekend
     }
+
+def get_hours_for_block(time_block: str) -> int:
+    """Get duration in hours for a time block"""
+    if time_block == "4h":
+        return 4
+    elif time_block == "12h":
+        return 12
+    else:  # 24h
+        return 24
+
+def check_booking_date_valid(booking_date: str) -> tuple:
+    """Check if booking date is valid (tomorrow to 3 months ahead)"""
+    booking_dt = datetime.strptime(booking_date, "%Y-%m-%d")
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow = today + timedelta(days=1)
+    max_date = today + timedelta(days=MAX_ADVANCE_MONTHS * 30)  # ~3 months
+    
+    if booking_dt < tomorrow:
+        return False, "Buchungen sind erst ab morgen möglich"
+    if booking_dt > max_date:
+        return False, f"Buchungen sind maximal {MAX_ADVANCE_MONTHS} Monate im Voraus möglich"
+    return True, None
 
 def check_availability(booking_date: str, start_time: str, time_block: str):
     """Check if time slot is available"""
+    # First check if date is valid
+    valid, message = check_booking_date_valid(booking_date)
+    if not valid:
+        return False, message
+    
     existing = list(db.bookings.find({
         "booking_date": booking_date,
         "status": {"$nin": ["cancelled"]}
@@ -160,14 +215,14 @@ def check_availability(booking_date: str, start_time: str, time_block: str):
     
     # Parse requested times
     req_start = datetime.strptime(f"{booking_date} {start_time}", "%Y-%m-%d %H:%M")
-    hours = 4 if time_block == "4h" else 24
+    hours = get_hours_for_block(time_block)
     req_end = req_start + timedelta(hours=hours)
     req_buffer_end = req_end + timedelta(hours=BUFFER_HOURS)
     
     for booking in existing:
         # Parse existing booking times
         ex_start = datetime.strptime(f"{booking['booking_date']} {booking['start_time']}", "%Y-%m-%d %H:%M")
-        ex_hours = 4 if booking['time_block'] == "4h" else 24
+        ex_hours = get_hours_for_block(booking['time_block'])
         ex_end = ex_start + timedelta(hours=ex_hours)
         ex_buffer_end = ex_end + timedelta(hours=BUFFER_HOURS)
         
@@ -515,12 +570,16 @@ async def get_pricing():
     """Get Robihütte pricing"""
     return {
         "pricing": [
-            {"label": "4 Stunden", "time_block": "4h", "day_label": "Alle Tage", "member_price": 80, "external_price": 120},
+            {"label": "4 Stunden", "time_block": "4h", "day_label": "Alle Tage", "member_price": 80, "external_price": 120, "time_note": "Flexible Startzeit"},
+            {"label": "12 Stunden", "time_block": "12h", "day_label": "Mo–Do", "member_price": 120, "external_price": 180, "time_note": "Flexible Startzeit"},
+            {"label": "12 Stunden", "time_block": "12h", "day_label": "Fr–So + Feiertage", "member_price": 150, "external_price": 270, "time_note": "Flexible Startzeit"},
             {"label": "24 Stunden", "time_block": "24h", "day_label": "Mo–Do", "member_price": 150, "external_price": 230, "time_note": "09:00 – 09:00 nächster Tag"},
             {"label": "24 Stunden", "time_block": "24h", "day_label": "Fr–So + Feiertage", "member_price": 200, "external_price": 350, "time_note": "09:00 – 09:00 nächster Tag"},
         ],
         "cleaning": {"price": CLEANING_PRICE, "label": "Optionale Reinigung"},
-        "deposit": {"amount": DEPOSIT, "note": "Bar bei Schlüsselübergabe"}
+        "deposit": {"amount": DEPOSIT, "note": "Bar bei Schlüsselübergabe"},
+        "buffer": {"hours": BUFFER_HOURS, "note": "Pufferzeit zwischen Buchungen"},
+        "max_advance_months": MAX_ADVANCE_MONTHS
     }
 
 # ==================== CONTACT ====================

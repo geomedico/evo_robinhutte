@@ -456,9 +456,9 @@ const RobihuettePage = () => {
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Preise</h2>
               {pricing && (
                 <div className="bg-gray-50 rounded-xl p-6">
-                  <table className="w-full">
+                  <table className="w-full text-sm">
                     <thead>
-                      <tr className="text-left text-sm text-gray-500 border-b">
+                      <tr className="text-left text-gray-500 border-b">
                         <th className="pb-3">Zeitblock</th>
                         <th className="pb-3">Mitglieder</th>
                         <th className="pb-3">Externe</th>
@@ -467,19 +467,21 @@ const RobihuettePage = () => {
                     <tbody>
                       {pricing.pricing.map((p, i) => (
                         <tr key={i} className="border-b last:border-0">
-                          <td className="py-3">
+                          <td className="py-2.5">
                             <span className="font-medium">{p.label}</span>
-                            {p.day_label && <span className="block text-sm text-gray-500">{p.day_label}</span>}
+                            {p.day_label && <span className="block text-xs text-gray-500">{p.day_label}</span>}
                           </td>
-                          <td className="py-3 text-amber-600 font-semibold">CHF {p.member_price}</td>
-                          <td className="py-3">CHF {p.external_price}</td>
+                          <td className="py-2.5 text-green-600 font-semibold">CHF {p.member_price}</td>
+                          <td className="py-2.5">CHF {p.external_price}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <div className="mt-4 pt-4 border-t text-sm text-gray-600">
+                  <div className="mt-4 pt-4 border-t text-sm text-gray-600 space-y-1">
                     <p>+ {pricing.cleaning.label}: CHF {pricing.cleaning.price}</p>
-                    <p className="mt-1">Kaution: CHF {pricing.deposit.amount} ({pricing.deposit.note})</p>
+                    <p>Kaution: CHF {pricing.deposit.amount} ({pricing.deposit.note})</p>
+                    {pricing.buffer && <p className="text-xs text-gray-500">Pufferzeit zwischen Buchungen: {pricing.buffer.hours}h</p>}
+                    {pricing.max_advance_months && <p className="text-xs text-gray-500">Max. Vorausbuchung: {pricing.max_advance_months} Monate</p>}
                   </div>
                 </div>
               )}
@@ -527,34 +529,49 @@ const RobihuettePage = () => {
 
 // ==================== DAY DETAILS MODAL ====================
 const DayDetailsModal = ({ date, bookings, onClose, onSelectSlot }) => {
-  // All possible time slots for a day
-  const ALL_SLOTS = [
-    { start: "08:00", end: "12:00", label: "Morgen (08:00-12:00)" },
-    { start: "09:00", end: "13:00", label: "Vormittag (09:00-13:00)" },
-    { start: "10:00", end: "14:00", label: "Mittag (10:00-14:00)" },
-    { start: "12:00", end: "16:00", label: "Nachmittag (12:00-16:00)" },
-    { start: "14:00", end: "18:00", label: "Spätnachmittag (14:00-18:00)" },
-    { start: "16:00", end: "20:00", label: "Abend (16:00-20:00)" },
-    { start: "18:00", end: "22:00", label: "Spätabend (18:00-22:00)" },
+  // All possible time slots for 4h bookings
+  const SLOTS_4H = [
+    { start: "08:00", end: "12:00", label: "08:00 - 12:00" },
+    { start: "10:00", end: "14:00", label: "10:00 - 14:00" },
+    { start: "12:00", end: "16:00", label: "12:00 - 16:00" },
+    { start: "14:00", end: "18:00", label: "14:00 - 18:00" },
+    { start: "16:00", end: "20:00", label: "16:00 - 20:00" },
+    { start: "18:00", end: "22:00", label: "18:00 - 22:00" },
   ];
 
+  // Time slots for 12h bookings
+  const SLOTS_12H = [
+    { start: "08:00", end: "20:00", label: "08:00 - 20:00" },
+    { start: "09:00", end: "21:00", label: "09:00 - 21:00" },
+    { start: "10:00", end: "22:00", label: "10:00 - 22:00" },
+  ];
+
+  const BUFFER_HOURS = 1.5;
   const dayBookings = bookings.filter(b => b.booking_date === date);
   const has24hBooking = dayBookings.some(b => b.time_block === "24h");
+  const has12hBooking = dayBookings.some(b => b.time_block === "12h");
+
+  // Get duration for a time block
+  const getBlockHours = (block) => {
+    if (block === "4h") return 4;
+    if (block === "12h") return 12;
+    return 24;
+  };
 
   // Check if a slot conflicts with existing bookings
-  const isSlotBusy = (slotStart) => {
+  const isSlotBusy = (slotStart, slotHours) => {
     if (has24hBooking) return true;
     
     const slotStartHour = parseInt(slotStart.split(":")[0]);
-    const slotEndHour = slotStartHour + 4;
+    const slotEndHour = slotStartHour + slotHours;
 
     for (const booking of dayBookings) {
       const bookingStartHour = parseInt(booking.start_time.split(":")[0]);
-      const bookingEndHour = booking.time_block === "24h" ? 24 : bookingStartHour + 4;
+      const bookingHours = getBlockHours(booking.time_block);
+      const bookingEndHour = bookingHours === 24 ? 24 : bookingStartHour + bookingHours;
       
-      // Check overlap (including 1.5h buffer)
-      const bufferHours = 1.5;
-      if (slotStartHour < (bookingEndHour + bufferHours) && slotEndHour > (bookingStartHour - bufferHours)) {
+      // Check overlap (including buffer)
+      if (slotStartHour < (bookingEndHour + BUFFER_HOURS) && (slotEndHour + BUFFER_HOURS) > bookingStartHour) {
         return true;
       }
     }
@@ -567,7 +584,15 @@ const DayDetailsModal = ({ date, bookings, onClose, onSelectSlot }) => {
     });
   };
 
-  const availableSlots = ALL_SLOTS.filter(slot => !isSlotBusy(slot.start));
+  const formatBookingTime = (booking) => {
+    const hours = getBlockHours(booking.time_block);
+    if (hours === 24) return "Ganztägig (09:00-09:00)";
+    const endHour = parseInt(booking.start_time.split(":")[0]) + hours;
+    return `${booking.start_time} - ${String(endHour).padStart(2, '0')}:00 (${booking.time_block})`;
+  };
+
+  const available4h = SLOTS_4H.filter(slot => !isSlotBusy(slot.start, 4));
+  const available12h = !has12hBooking ? SLOTS_12H.filter(slot => !isSlotBusy(slot.start, 12)) : [];
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -597,12 +622,7 @@ const DayDetailsModal = ({ date, bookings, onClose, onSelectSlot }) => {
                   <div key={idx} className="bg-red-50 border border-red-100 rounded-lg p-3">
                     <div className="flex items-center gap-2">
                       <Clock size={14} className="text-red-500" />
-                      <span className="font-medium text-red-700">
-                        {booking.time_block === "24h" 
-                          ? "Ganztägig (09:00-09:00)" 
-                          : `${booking.start_time} - ${String(parseInt(booking.start_time.split(":")[0]) + 4).padStart(2, '0')}:00`
-                        }
-                      </span>
+                      <span className="font-medium text-red-700">{formatBookingTime(booking)}</span>
                     </div>
                     <p className="text-sm text-red-600 mt-1">{booking.event_type}</p>
                   </div>
@@ -611,38 +631,50 @@ const DayDetailsModal = ({ date, bookings, onClose, onSelectSlot }) => {
             </div>
           )}
 
-          {/* Available slots */}
-          <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-              <Check size={16} className="text-green-500" />
-              {availableSlots.length > 0 ? "Verfügbare Zeitfenster (4h)" : "Keine freien Zeitfenster"}
-            </h4>
-            
-            {has24hBooking ? (
-              <p className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
-                Dieser Tag ist für eine 24h-Buchung reserviert.
-              </p>
-            ) : availableSlots.length > 0 ? (
+          {/* Available 4h slots */}
+          {!has24hBooking && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                <Check size={16} className="text-green-500" />
+                {available4h.length > 0 ? "Verfügbare 4h Slots" : "Keine 4h Slots frei"}
+              </h4>
+              {available4h.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {available4h.map((slot, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => onSelectSlot(date, slot.start, "4h")}
+                      className="flex items-center justify-between p-2.5 border border-gray-200 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition-all text-left text-sm"
+                    >
+                      <span className="font-medium text-gray-900">{slot.label}</span>
+                      <ArrowRight size={14} className="text-amber-500" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">Alle 4h Slots belegt.</p>
+              )}
+            </div>
+          )}
+
+          {/* Available 12h slots */}
+          {!has24hBooking && available12h.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Verfügbare 12h Slots</h4>
               <div className="grid grid-cols-1 gap-2">
-                {availableSlots.map((slot, idx) => (
+                {available12h.map((slot, idx) => (
                   <button
                     key={idx}
-                    onClick={() => onSelectSlot(date, slot.start)}
-                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition-all text-left"
+                    onClick={() => onSelectSlot(date, slot.start, "12h")}
+                    className="flex items-center justify-between p-3 border border-blue-200 bg-blue-50 rounded-lg hover:border-blue-500 hover:bg-blue-100 transition-all text-left"
                   >
-                    <div>
-                      <span className="font-medium text-gray-900">{slot.start} - {slot.end}</span>
-                    </div>
-                    <ArrowRight size={16} className="text-amber-500" />
+                    <span className="font-medium text-blue-700">{slot.label}</span>
+                    <ArrowRight size={16} className="text-blue-500" />
                   </button>
                 ))}
               </div>
-            ) : (
-              <p className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
-                Alle Zeitfenster sind belegt. Bitte wählen Sie einen anderen Tag.
-              </p>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* 24h option if day is free */}
           {dayBookings.length === 0 && (
@@ -658,6 +690,13 @@ const DayDetailsModal = ({ date, bookings, onClose, onSelectSlot }) => {
                 </div>
                 <ArrowRight size={16} className="text-amber-600" />
               </button>
+            </div>
+          )}
+
+          {/* Fully booked message */}
+          {has24hBooking && (
+            <div className="bg-gray-50 p-4 rounded-lg text-center">
+              <p className="text-gray-600">Dieser Tag ist für eine 24h-Buchung reserviert.</p>
             </div>
           )}
         </div>
@@ -1130,24 +1169,44 @@ const BookingPage = () => {
               {/* Time block selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Zeitblock</label>
-                <div className="grid grid-cols-2 gap-4">
-                  {["4h", "24h"].map(block => (
-                    <button key={block} type="button" onClick={() => setForm(prev => ({ ...prev, time_block: block }))} className={`p-4 border rounded-lg text-left ${form.time_block === block ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <span className="block font-semibold">{block === "4h" ? "4 Stunden" : "24 Stunden"}</span>
-                      <span className="text-sm text-gray-500">{block === "4h" ? "Flexible Startzeit" : "09:00 - 09:00"}</span>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { value: "4h", label: "4 Stunden", desc: "Flexible Startzeit" },
+                    { value: "12h", label: "12 Stunden", desc: "Flexible Startzeit" },
+                    { value: "24h", label: "24 Stunden", desc: "09:00 - 09:00" }
+                  ].map(block => (
+                    <button 
+                      key={block.value} 
+                      type="button" 
+                      onClick={() => setForm(prev => ({ ...prev, time_block: block.value, start_time: block.value === "24h" ? "09:00" : prev.start_time }))} 
+                      className={`p-4 border rounded-lg text-left transition-all ${form.time_block === block.value ? 'border-amber-500 bg-amber-50 shadow-sm' : 'border-gray-200 hover:border-gray-300'}`}
+                    >
+                      <span className="block font-semibold">{block.label}</span>
+                      <span className="text-xs text-gray-500">{block.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {form.time_block === "4h" && (
+              {(form.time_block === "4h" || form.time_block === "12h") && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Startzeit</label>
                   <select name="start_time" value={form.start_time} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500">
-                    {["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"].map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
+                    {form.time_block === "4h" 
+                      ? ["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"].map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))
+                      : ["08:00","09:00","10:00","11:00","12:00"].map(t => (
+                          <option key={t} value={t}>{t} - {String(parseInt(t.split(":")[0]) + 12).padStart(2, '0')}:00</option>
+                        ))
+                    }
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {form.time_block === "4h" 
+                      ? `Endzeit: ${String(parseInt(form.start_time.split(":")[0]) + 4).padStart(2, '0')}:00 (+ 1.5h Puffer)`
+                      : `Endzeit: ${String(parseInt(form.start_time.split(":")[0]) + 12).padStart(2, '0')}:00 (+ 1.5h Puffer)`
+                    }
+                  </p>
                 </div>
               )}
 
