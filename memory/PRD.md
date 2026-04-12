@@ -33,8 +33,12 @@ Build a functional draft website for EVO (Elternvereinigung Oberglatt) according
 11. **Legal pages** - Impressum, Datenschutz, AGB
 
 ### Features
+- ✅ **Official EVO Logo** in header and footer
 - ✅ User registration & login (JWT-based)
-- ✅ Member vs External pricing differentiation
+- ✅ **Dual Booking Mode**:
+  - **Members**: 3 steps, member pricing, instant confirmation
+  - **External/Guests**: 4 steps, external pricing, pending status
+- ✅ Member vs External pricing differentiation clearly displayed
 - ✅ **Visual Booking Calendar** with:
   - 3-state days: Free (white), Partially busy (amber), Fully booked (red)
   - Calendar starts from tomorrow (today's date disabled)
