@@ -36,11 +36,16 @@ Build a functional draft website for EVO (Elternvereinigung Oberglatt) according
 - ✅ User registration & login (JWT-based)
 - ✅ Member vs External pricing differentiation
 - ✅ **Visual Booking Calendar** with:
-  - Busy/Free date visualization (red = busy, white = available)
+  - 3-state days: Free (white), Partially busy (amber), Fully booked (red)
   - Calendar starts from tomorrow (today's date disabled)
+  - **Click on any day to see availability details**
+  - Modal shows existing bookings with time + event type
+  - Modal shows available slots on partially busy days
+  - Click slot to auto-fill booking form
+  - Fully booked days show "24h-Buchung reserviert"
   - Demo bookings seeded for preview
   - Month navigation
-  - Legend: Ausgewählt / Belegt / Verfügbar
+  - Legend: Ausgewählt / Teilweise belegt / Voll belegt / Frei
 - ✅ Robihütte booking system with:
   - 4h and 24h time blocks
   - Weekday vs Weekend pricing
