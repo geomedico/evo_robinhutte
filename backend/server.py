@@ -104,7 +104,7 @@ def get_current_user(token: str):
         if user:
             return serialize_doc(user)
         return None
-    except:
+    except (jwt.InvalidTokenError, jwt.DecodeError, Exception):
         return None
 
 def hash_password(password: str) -> str:
@@ -287,6 +287,65 @@ async def get_me(token: str):
     user.pop("password", None)
     return user
 
+# ==================== BOOKING HELPERS ====================
+
+def _generate_reference_number() -> str:
+    """Generate unique booking reference number"""
+    count = db.bookings.count_documents({}) + 1
+    return f"RH-{datetime.now().year}-{count:04d}"
+
+
+def _calculate_end_time(booking_date: str, start_time: str, time_block: str) -> str:
+    """Calculate booking end time based on time block"""
+    start_dt = datetime.strptime(f"{booking_date} {start_time}", "%Y-%m-%d %H:%M")
+    hours = get_hours_for_block(time_block)
+    end_dt = start_dt + timedelta(hours=hours)
+    return end_dt.strftime("%H:%M")
+
+
+def _create_booking_document(
+    booking_data: dict,
+    user_info: dict,
+    price: dict,
+    is_external: bool = False
+) -> dict:
+    """Create booking document with all required fields"""
+    end_time = _calculate_end_time(
+        booking_data["booking_date"],
+        booking_data["start_time"], 
+        booking_data["time_block"]
+    )
+    
+    doc = {
+        "reference_number": _generate_reference_number(),
+        "user_id": user_info["id"],
+        "user_name": user_info["name"],
+        "user_email": user_info["email"],
+        "booking_date": booking_data["booking_date"],
+        "start_time": booking_data["start_time"],
+        "end_time": end_time,
+        "time_block": booking_data["time_block"],
+        "event_type": booking_data["event_type"],
+        "expected_guests": booking_data["expected_guests"],
+        "cleaning_addon": booking_data["cleaning_addon"],
+        "special_requests": booking_data.get("special_requests"),
+        "rental_price": price["rental_price"],
+        "cleaning_price": price["cleaning_price"],
+        "total_price": price["total"],
+        "deposit": DEPOSIT,
+        "is_member": user_info.get("is_member", False),
+        "status": "pending" if is_external else "confirmed",
+        "payment_status": "pending",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    if is_external:
+        doc["user_phone"] = user_info.get("phone", "")
+        doc["is_external"] = True
+    
+    return doc
+
+
 # ==================== BOOKING ENDPOINTS ====================
 
 @app.get("/api/bookings/availability/{year}/{month}")
@@ -308,51 +367,67 @@ async def get_availability(year: int, month: int):
 @app.post("/api/bookings/seed")
 async def seed_bookings():
     """Seed sample bookings for demo purposes"""
-    from datetime import datetime, timedelta
     
     # Clear existing seed bookings
     db.bookings.delete_many({"is_seed": True})
     
     today = datetime.now()
-    seed_bookings = []
+    seed_data = _generate_seed_bookings(today)
     
-    # Add some busy dates in the coming weeks
+    if seed_data:
+        db.bookings.insert_many(seed_data)
+    
+    return {
+        "message": f"{len(seed_data)} Demo-Buchungen erstellt", 
+        "dates": [b["booking_date"] for b in seed_data]
+    }
+
+
+def _generate_seed_bookings(today: datetime) -> list:
+    """Generate seed booking data - extracted for testability"""
     busy_offsets = [3, 5, 7, 10, 12, 14, 17, 19, 21, 24, 28]
     event_types = ["Geburtstag", "Familienfeier", "Vereinsanlass", "Firmenanlass"]
+    start_times = ["10:00", "14:00", "18:00"]
     
-    for i, offset in enumerate(busy_offsets):
-        booking_date = (today + timedelta(days=offset)).strftime("%Y-%m-%d")
-        time_block = "24h" if offset % 3 == 0 else "4h"
-        start_time = "09:00" if time_block == "24h" else ["10:00", "14:00", "18:00"][i % 3]
-        
-        seed_bookings.append({
-            "reference_number": f"SEED-{offset:04d}",
-            "user_id": "seed_user",
-            "user_name": "Demo User",
-            "user_email": "demo@example.ch",
-            "booking_date": booking_date,
-            "start_time": start_time,
-            "end_time": "09:00" if time_block == "24h" else str(int(start_time.split(":")[0]) + 4).zfill(2) + ":00",
-            "time_block": time_block,
-            "event_type": event_types[i % len(event_types)],
-            "expected_guests": 20 + (i * 5) % 30,
-            "cleaning_addon": i % 2 == 0,
-            "special_requests": None,
-            "rental_price": 150 if time_block == "24h" else 80,
-            "cleaning_price": 60 if i % 2 == 0 else 0,
-            "total_price": (150 if time_block == "24h" else 80) + (60 if i % 2 == 0 else 0),
-            "deposit": 250,
-            "is_member": True,
-            "status": "confirmed",
-            "payment_status": "paid",
-            "is_seed": True,
-            "created_at": datetime.utcnow().isoformat()
-        })
+    return [
+        _create_seed_booking(today, offset, i, event_types, start_times)
+        for i, offset in enumerate(busy_offsets)
+    ]
+
+
+def _create_seed_booking(today: datetime, offset: int, index: int, event_types: list, start_times: list) -> dict:
+    """Create a single seed booking document"""
+    booking_date = (today + timedelta(days=offset)).strftime("%Y-%m-%d")
+    time_block = "24h" if offset % 3 == 0 else "4h"
+    start_time = "09:00" if time_block == "24h" else start_times[index % 3]
+    has_cleaning = index % 2 == 0
+    base_price = 150 if time_block == "24h" else 80
     
-    if seed_bookings:
-        db.bookings.insert_many(seed_bookings)
+    end_hour = "09" if time_block == "24h" else str(int(start_time.split(":")[0]) + 4).zfill(2)
     
-    return {"message": f"{len(seed_bookings)} Demo-Buchungen erstellt", "dates": [b["booking_date"] for b in seed_bookings]}
+    return {
+        "reference_number": f"SEED-{offset:04d}",
+        "user_id": "seed_user",
+        "user_name": "Demo User",
+        "user_email": "demo@example.ch",
+        "booking_date": booking_date,
+        "start_time": start_time,
+        "end_time": f"{end_hour}:00",
+        "time_block": time_block,
+        "event_type": event_types[index % len(event_types)],
+        "expected_guests": 20 + (index * 5) % 30,
+        "cleaning_addon": has_cleaning,
+        "special_requests": None,
+        "rental_price": base_price,
+        "cleaning_price": 60 if has_cleaning else 0,
+        "total_price": base_price + (60 if has_cleaning else 0),
+        "deposit": 250,
+        "is_member": True,
+        "status": "confirmed",
+        "payment_status": "paid",
+        "is_seed": True,
+        "created_at": datetime.utcnow().isoformat()
+    }
 
 @app.post("/api/bookings/check-price")
 async def check_price(
@@ -403,50 +478,23 @@ async def create_booking(booking: BookingCreate, token: str):
         raise HTTPException(400, message)
     
     # Calculate price
-    price = calculate_price(
-        booking.time_block,
-        booking.booking_date,
-        user.get("is_member", False),
-        booking.cleaning_addon
+    is_member = user.get("is_member", False)
+    price = calculate_price(booking.time_block, booking.booking_date, is_member, booking.cleaning_addon)
+    
+    # Create booking document
+    booking_doc = _create_booking_document(
+        booking_data=booking.dict(),
+        user_info={"id": user["id"], "name": user["name"], "email": user["email"], "is_member": is_member},
+        price=price,
+        is_external=False
     )
-    
-    # Calculate end time
-    start_dt = datetime.strptime(f"{booking.booking_date} {booking.start_time}", "%Y-%m-%d %H:%M")
-    hours = 4 if booking.time_block == "4h" else 24
-    end_dt = start_dt + timedelta(hours=hours)
-    
-    # Generate reference number
-    count = db.bookings.count_documents({}) + 1
-    ref_number = f"RH-{datetime.now().year}-{count:04d}"
-    
-    booking_doc = {
-        "reference_number": ref_number,
-        "user_id": user["id"],
-        "user_name": user["name"],
-        "user_email": user["email"],
-        "booking_date": booking.booking_date,
-        "start_time": booking.start_time,
-        "end_time": end_dt.strftime("%H:%M"),
-        "time_block": booking.time_block,
-        "event_type": booking.event_type,
-        "expected_guests": booking.expected_guests,
-        "cleaning_addon": booking.cleaning_addon,
-        "special_requests": booking.special_requests,
-        "rental_price": price["rental_price"],
-        "cleaning_price": price["cleaning_price"],
-        "total_price": price["total"],
-        "deposit": DEPOSIT,
-        "is_member": user.get("is_member", False),
-        "status": "confirmed",
-        "payment_status": "pending",
-        "created_at": datetime.utcnow().isoformat()
-    }
     
     result = db.bookings.insert_one(booking_doc)
     booking_doc["id"] = str(result.inserted_id)
     del booking_doc["_id"]
     
     return {"message": "Buchung erfolgreich", "booking": booking_doc}
+
 
 @app.post("/api/bookings/external")
 async def create_external_booking(booking: ExternalBookingCreate):
@@ -457,47 +505,16 @@ async def create_external_booking(booking: ExternalBookingCreate):
     if not available:
         raise HTTPException(400, message)
     
-    # Calculate price for external users (is_member=False)
-    price = calculate_price(
-        booking.time_block,
-        booking.booking_date,
-        False,  # External users are not members
-        booking.cleaning_addon
+    # Calculate price for external users
+    price = calculate_price(booking.time_block, booking.booking_date, False, booking.cleaning_addon)
+    
+    # Create booking document
+    booking_doc = _create_booking_document(
+        booking_data=booking.dict(),
+        user_info={"id": "external", "name": booking.name, "email": booking.email, "phone": booking.phone, "is_member": False},
+        price=price,
+        is_external=True
     )
-    
-    # Calculate end time
-    start_dt = datetime.strptime(f"{booking.booking_date} {booking.start_time}", "%Y-%m-%d %H:%M")
-    hours = 4 if booking.time_block == "4h" else 24
-    end_dt = start_dt + timedelta(hours=hours)
-    
-    # Generate reference number
-    count = db.bookings.count_documents({}) + 1
-    ref_number = f"RH-{datetime.now().year}-{count:04d}"
-    
-    booking_doc = {
-        "reference_number": ref_number,
-        "user_id": "external",
-        "user_name": booking.name,
-        "user_email": booking.email,
-        "user_phone": booking.phone,
-        "booking_date": booking.booking_date,
-        "start_time": booking.start_time,
-        "end_time": end_dt.strftime("%H:%M"),
-        "time_block": booking.time_block,
-        "event_type": booking.event_type,
-        "expected_guests": booking.expected_guests,
-        "cleaning_addon": booking.cleaning_addon,
-        "special_requests": booking.special_requests,
-        "rental_price": price["rental_price"],
-        "cleaning_price": price["cleaning_price"],
-        "total_price": price["total"],
-        "deposit": DEPOSIT,
-        "is_member": False,
-        "is_external": True,
-        "status": "pending",  # External bookings need confirmation
-        "payment_status": "pending",
-        "created_at": datetime.utcnow().isoformat()
-    }
     
     result = db.bookings.insert_one(booking_doc)
     booking_doc["id"] = str(result.inserted_id)

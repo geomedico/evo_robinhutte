@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, createContext, useContext, useCallback, useMemo } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -6,6 +6,7 @@ import {
   Mail, Phone, MapPin, Calendar, Users, Home, Heart, ArrowRight, Menu, X, 
   ChevronRight, ChevronLeft, LogIn, LogOut, User, Clock, Check, AlertCircle
 } from "lucide-react";
+import { getToken, setToken as saveToken, removeToken, migrateFromLocalStorage } from "./utils/auth";
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
@@ -16,44 +17,71 @@ export const useAuth = () => useContext(AuthContext);
 
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("evo_token"));
+  const [token, setToken] = useState(() => {
+    migrateFromLocalStorage(); // One-time migration from localStorage
+    return getToken();
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      axios.get(`${API}/auth/me?token=${token}`)
-        .then(res => setUser(res.data))
-        .catch(() => { localStorage.removeItem("evo_token"); setToken(null); })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    let isMounted = true;
+    
+    const fetchUser = async () => {
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const res = await axios.get(`${API}/auth/me?token=${token}`);
+        if (isMounted) {
+          setUser(res.data);
+        }
+      } catch {
+        removeToken();
+        if (isMounted) {
+          setToken(null);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    fetchUser();
+    
+    return () => { isMounted = false; };
   }, [token]);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const res = await axios.post(`${API}/auth/login`, { email, password });
-    localStorage.setItem("evo_token", res.data.token);
+    saveToken(res.data.token);
     setToken(res.data.token);
     setUser(res.data.user);
     return res.data;
-  };
+  }, []);
 
-  const register = async (data) => {
+  const register = useCallback(async (data) => {
     const res = await axios.post(`${API}/auth/register`, data);
-    localStorage.setItem("evo_token", res.data.token);
+    saveToken(res.data.token);
     setToken(res.data.token);
     setUser(res.data.user);
     return res.data;
-  };
+  }, []);
 
-  const logout = () => {
-    localStorage.removeItem("evo_token");
+  const logout = useCallback(() => {
+    removeToken();
     setToken(null);
     setUser(null);
-  };
+  }, []);
+
+  const value = useMemo(() => ({ 
+    user, token, login, register, logout, loading 
+  }), [user, token, login, register, logout, loading]);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
@@ -232,13 +260,44 @@ const Footer = () => {
 };
 
 // ==================== HOME PAGE ====================
+const MISSION_VALUES = [
+  { id: "begegnungen", icon: Users, title: "Begegnungen", desc: "Anlässe für Familien, Kinder und Jugendliche" },
+  { id: "gemeinschaft", icon: Heart, title: "Gemeinschaft", desc: "Lebendiges Miteinander in unserer Gemeinde" },
+  { id: "zusammenarbeit", icon: Home, title: "Zusammenarbeit", desc: "Mit Schulen, Vereinen und der Gemeinde" },
+];
+
+const ROBIHUETTE_FEATURES = [
+  { id: "capacity", text: "Platz für bis zu 50 Personen" },
+  { id: "kitchen", text: "Voll ausgestattete Küche" },
+  { id: "garden", text: "Grosser Garten mit Spielplatz" },
+  { id: "parking", text: "Parkplätze vor Ort" },
+];
+
 const HomePage = () => {
   const [events, setEvents] = useState([]);
   const [team, setTeam] = useState([]);
 
   useEffect(() => {
-    axios.get(`${API}/events?limit=3`).then(res => setEvents(res.data.events)).catch(console.error);
-    axios.get(`${API}/board-members`).then(res => setTeam(res.data.members)).catch(console.error);
+    let isMounted = true;
+    
+    const fetchData = async () => {
+      try {
+        const [eventsRes, teamRes] = await Promise.all([
+          axios.get(`${API}/events?limit=3`),
+          axios.get(`${API}/board-members`)
+        ]);
+        
+        if (isMounted) {
+          setEvents(eventsRes.data.events || []);
+          setTeam(teamRes.data.members || []);
+        }
+      } catch (err) {
+        // Silently handle errors - data will remain empty arrays
+      }
+    };
+    
+    fetchData();
+    return () => { isMounted = false; };
   }, []);
 
   return (
@@ -276,12 +335,8 @@ const HomePage = () => {
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">Die Elternvereinigung Oberglatt ist eine Gemeinschaft von Eltern für Kinder.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { icon: Users, title: "Begegnungen", desc: "Anlässe für Familien, Kinder und Jugendliche" },
-              { icon: Heart, title: "Gemeinschaft", desc: "Lebendiges Miteinander in unserer Gemeinde" },
-              { icon: Home, title: "Zusammenarbeit", desc: "Mit Schulen, Vereinen und der Gemeinde" },
-            ].map((v, i) => (
-              <div key={i} className="group p-8 bg-gray-50 rounded-2xl hover:bg-amber-50 transition-all duration-300 hover:shadow-lg">
+            {MISSION_VALUES.map((v) => (
+              <div key={v.id} className="group p-8 bg-gray-50 rounded-2xl hover:bg-amber-50 transition-all duration-300 hover:shadow-lg">
                 <div className="w-14 h-14 bg-amber-500/10 rounded-xl flex items-center justify-center mb-6 group-hover:bg-amber-500 transition-colors">
                   <v.icon className="w-7 h-7 text-amber-600 group-hover:text-white transition-colors" />
                 </div>
@@ -306,8 +361,8 @@ const HomePage = () => {
             </Link>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
-            {events.map((event, i) => (
-              <article key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all">
+            {events.map((event) => (
+              <article key={event.id || event.title} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all">
                 <div className="relative h-48 bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
                   <Calendar size={48} className="text-amber-500" />
                   <div className="absolute top-4 left-4 bg-white rounded-lg px-3 py-2 shadow-lg">
@@ -349,12 +404,12 @@ const HomePage = () => {
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 mb-6">Dein Ort für unvergessliche Feste</h2>
               <p className="text-gray-600 mb-6">Die Robihütte ist perfekt für Geburtstage, Familienfeiern und Vereinsanlässe. Platz für bis zu 50 Personen.</p>
               <ul className="space-y-3 mb-8">
-                {["Platz für bis zu 50 Personen", "Voll ausgestattete Küche", "Grosser Garten mit Spielplatz", "Parkplätze vor Ort"].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-gray-700">
+                {ROBIHUETTE_FEATURES.map((item) => (
+                  <li key={item.id} className="flex items-center gap-3 text-gray-700">
                     <span className="w-5 h-5 bg-amber-100 rounded-full flex items-center justify-center">
                       <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
                     </span>
-                    {item}
+                    {item.text}
                   </li>
                 ))}
               </ul>
@@ -374,8 +429,8 @@ const HomePage = () => {
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 mb-4">Der Vorstand</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
-            {team.slice(0,3).map((member, i) => (
-              <div key={i} className="bg-white rounded-2xl p-6 text-center shadow-sm hover:shadow-xl transition-all">
+            {team.slice(0,3).map((member) => (
+              <div key={member.id || member.email} className="bg-white rounded-2xl p-6 text-center shadow-sm hover:shadow-xl transition-all">
                 <div className="w-24 h-24 mx-auto mb-4 rounded-full overflow-hidden ring-4 ring-amber-100">
                   <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
                 </div>
@@ -411,12 +466,25 @@ const HomePage = () => {
 };
 
 // ==================== ROBIHÜTTE PAGE ====================
+const ROBIHUETTE_AUSSTATTUNG = [
+  { id: "max-persons", text: "Max. 50 Personen" },
+  { id: "kitchen", text: "Voll ausgestattete Küche" },
+  { id: "garden", text: "Grosser Garten" },
+  { id: "playground", text: "Spielplatz" },
+  { id: "parking", text: "Parkplätze" },
+  { id: "toilets", text: "Toiletten" },
+];
+
 const RobihuettePage = () => {
   const [pricing, setPricing] = useState(null);
   const { user } = useAuth();
 
   useEffect(() => {
-    axios.get(`${API}/pricing`).then(res => setPricing(res.data)).catch(console.error);
+    let isMounted = true;
+    axios.get(`${API}/pricing`)
+      .then(res => { if (isMounted) setPricing(res.data); })
+      .catch(() => {});
+    return () => { isMounted = false; };
   }, []);
 
   return (
@@ -445,9 +513,9 @@ const RobihuettePage = () => {
               </p>
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Ausstattung</h3>
               <ul className="grid grid-cols-2 gap-2 mb-6">
-                {["Max. 50 Personen", "Voll ausgestattete Küche", "Grosser Garten", "Spielplatz", "Parkplätze", "Toiletten"].map((item, i) => (
-                  <li key={i} className="flex items-center gap-2 text-gray-600">
-                    <Check size={16} className="text-amber-500" />{item}
+                {ROBIHUETTE_AUSSTATTUNG.map((item) => (
+                  <li key={item.id} className="flex items-center gap-2 text-gray-600">
+                    <Check size={16} className="text-amber-500" />{item.text}
                   </li>
                 ))}
               </ul>
@@ -465,8 +533,8 @@ const RobihuettePage = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {pricing.pricing.map((p, i) => (
-                        <tr key={i} className="border-b last:border-0">
+                      {pricing.pricing.map((p) => (
+                        <tr key={`${p.time_block}-${p.day_label}`} className="border-b last:border-0">
                           <td className="py-2.5">
                             <span className="font-medium">{p.label}</span>
                             {p.day_label && <span className="block text-xs text-gray-500">{p.day_label}</span>}
