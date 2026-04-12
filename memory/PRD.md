@@ -64,10 +64,20 @@ Build a functional draft website for EVO (Elternvereinigung Oberglatt) according
 | Time Block | Day | Member | External |
 |------------|-----|--------|----------|
 | 4 Stunden | All | CHF 80 | CHF 120 |
+| 12 Stunden | Mo-Do | CHF 120 | CHF 180 |
+| 12 Stunden | Fr-So + Feiertage | CHF 150 | CHF 270 |
 | 24 Stunden | Mo-Do | CHF 150 | CHF 230 |
-| 24 Stunden | Fr-So | CHF 200 | CHF 350 |
+| 24 Stunden | Fr-So + Feiertage | CHF 200 | CHF 350 |
 | Reinigung | - | +CHF 60 | +CHF 60 |
 | Kaution | - | CHF 250 | CHF 250 |
+
+### Business Rules
+- 1.5h buffer between all bookings
+- Max. 3 months advance booking
+- No same-day booking (earliest: tomorrow)
+- Swiss holidays count as weekend pricing
+- 24h blocks: fixed 09:00-09:00
+- 4h/12h blocks: flexible start times
 
 ---
 
