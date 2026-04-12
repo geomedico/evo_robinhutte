@@ -517,13 +517,155 @@ const RobihuettePage = () => {
   );
 };
 
+// ==================== DAY DETAILS MODAL ====================
+const DayDetailsModal = ({ date, bookings, onClose, onSelectSlot }) => {
+  // All possible time slots for a day
+  const ALL_SLOTS = [
+    { start: "08:00", end: "12:00", label: "Morgen (08:00-12:00)" },
+    { start: "09:00", end: "13:00", label: "Vormittag (09:00-13:00)" },
+    { start: "10:00", end: "14:00", label: "Mittag (10:00-14:00)" },
+    { start: "12:00", end: "16:00", label: "Nachmittag (12:00-16:00)" },
+    { start: "14:00", end: "18:00", label: "Spätnachmittag (14:00-18:00)" },
+    { start: "16:00", end: "20:00", label: "Abend (16:00-20:00)" },
+    { start: "18:00", end: "22:00", label: "Spätabend (18:00-22:00)" },
+  ];
+
+  const dayBookings = bookings.filter(b => b.booking_date === date);
+  const has24hBooking = dayBookings.some(b => b.time_block === "24h");
+
+  // Check if a slot conflicts with existing bookings
+  const isSlotBusy = (slotStart) => {
+    if (has24hBooking) return true;
+    
+    const slotStartHour = parseInt(slotStart.split(":")[0]);
+    const slotEndHour = slotStartHour + 4;
+
+    for (const booking of dayBookings) {
+      const bookingStartHour = parseInt(booking.start_time.split(":")[0]);
+      const bookingEndHour = booking.time_block === "24h" ? 24 : bookingStartHour + 4;
+      
+      // Check overlap (including 1.5h buffer)
+      const bufferHours = 1.5;
+      if (slotStartHour < (bookingEndHour + bufferHours) && slotEndHour > (bookingStartHour - bufferHours)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const formatDate = (dateStr) => {
+    return new Date(dateStr).toLocaleDateString('de-CH', { 
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
+    });
+  };
+
+  const availableSlots = ALL_SLOTS.filter(slot => !isSlotBusy(slot.start));
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-md w-full max-h-[80vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="p-6 border-b border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Tagesübersicht</h3>
+              <p className="text-sm text-gray-500">{formatDate(date)}</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Existing bookings */}
+          {dayBookings.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                <Calendar size={16} className="text-red-500" />
+                Bestehende Buchungen
+              </h4>
+              <div className="space-y-2">
+                {dayBookings.map((booking, idx) => (
+                  <div key={idx} className="bg-red-50 border border-red-100 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-red-500" />
+                      <span className="font-medium text-red-700">
+                        {booking.time_block === "24h" 
+                          ? "Ganztägig (09:00-09:00)" 
+                          : `${booking.start_time} - ${String(parseInt(booking.start_time.split(":")[0]) + 4).padStart(2, '0')}:00`
+                        }
+                      </span>
+                    </div>
+                    <p className="text-sm text-red-600 mt-1">{booking.event_type}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Available slots */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+              <Check size={16} className="text-green-500" />
+              {availableSlots.length > 0 ? "Verfügbare Zeitfenster (4h)" : "Keine freien Zeitfenster"}
+            </h4>
+            
+            {has24hBooking ? (
+              <p className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                Dieser Tag ist für eine 24h-Buchung reserviert.
+              </p>
+            ) : availableSlots.length > 0 ? (
+              <div className="grid grid-cols-1 gap-2">
+                {availableSlots.map((slot, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => onSelectSlot(date, slot.start)}
+                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition-all text-left"
+                  >
+                    <div>
+                      <span className="font-medium text-gray-900">{slot.start} - {slot.end}</span>
+                    </div>
+                    <ArrowRight size={16} className="text-amber-500" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                Alle Zeitfenster sind belegt. Bitte wählen Sie einen anderen Tag.
+              </p>
+            )}
+          </div>
+
+          {/* 24h option if day is free */}
+          {dayBookings.length === 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">24 Stunden Buchung</h4>
+              <button
+                onClick={() => onSelectSlot(date, "09:00", "24h")}
+                className="w-full flex items-center justify-between p-3 border-2 border-amber-500 bg-amber-50 rounded-lg hover:bg-amber-100 transition-all"
+              >
+                <div>
+                  <span className="font-medium text-amber-700">Ganzer Tag (09:00 - 09:00)</span>
+                  <p className="text-sm text-amber-600">Exklusive Nutzung für 24 Stunden</p>
+                </div>
+                <ArrowRight size={16} className="text-amber-600" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ==================== BOOKING CALENDAR COMPONENT ====================
-const BookingCalendar = ({ selectedDate, onSelectDate, busyDates }) => {
+const BookingCalendar = ({ selectedDate, onSelectDate, busyDates, onSelectSlot }) => {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     return new Date(tomorrow.getFullYear(), tomorrow.getMonth(), 1);
   });
+  const [showDayModal, setShowDayModal] = useState(null);
 
   const MONTHS_DE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
   const DAYS_DE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -557,10 +699,31 @@ const BookingCalendar = ({ selectedDate, onSelectDate, busyDates }) => {
     return date.toISOString().split('T')[0];
   };
 
-  const isDateBusy = (date) => {
-    if (!date) return false;
+  const getDateBookings = (date) => {
+    if (!date) return [];
     const dateStr = formatDateString(date);
-    return busyDates.some(b => b.booking_date === dateStr);
+    return busyDates.filter(b => b.booking_date === dateStr);
+  };
+
+  const isDateBusy = (date) => {
+    const bookings = getDateBookings(date);
+    if (bookings.length === 0) return false;
+    // Check if fully booked (24h booking or multiple 4h bookings covering the day)
+    if (bookings.some(b => b.time_block === "24h")) return true;
+    // For simplicity, if there are bookings, show as partially busy (orange dot)
+    return false; // Allow clicking to see details
+  };
+
+  const isDatePartiallyBusy = (date) => {
+    const bookings = getDateBookings(date);
+    if (bookings.length === 0) return false;
+    if (bookings.some(b => b.time_block === "24h")) return false;
+    return true; // Has some bookings but may have free slots
+  };
+
+  const isDateFullyBooked = (date) => {
+    const bookings = getDateBookings(date);
+    return bookings.some(b => b.time_block === "24h");
   };
 
   const isDatePast = (date) => {
@@ -575,6 +738,24 @@ const BookingCalendar = ({ selectedDate, onSelectDate, busyDates }) => {
   const isDateSelected = (date) => {
     if (!date || !selectedDate) return false;
     return formatDateString(date) === selectedDate;
+  };
+
+  const handleDateClick = (date) => {
+    const dateStr = formatDateString(date);
+    const bookings = getDateBookings(date);
+    
+    if (bookings.length > 0) {
+      // Show modal with day details
+      setShowDayModal(dateStr);
+    } else {
+      // Free day - select directly
+      onSelectDate(dateStr);
+    }
+  };
+
+  const handleSlotSelect = (date, startTime, timeBlock = "4h") => {
+    setShowDayModal(null);
+    onSelectSlot(date, startTime, timeBlock);
   };
 
   const handlePrevMonth = () => {
@@ -597,83 +778,109 @@ const BookingCalendar = ({ selectedDate, onSelectDate, busyDates }) => {
   const canGoPrev = currentMonth > new Date(tomorrow.getFullYear(), tomorrow.getMonth(), 1);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <button 
-          onClick={handlePrevMonth} 
-          disabled={!canGoPrev}
-          className={`p-2 rounded-lg ${canGoPrev ? 'hover:bg-gray-100' : 'opacity-30 cursor-not-allowed'}`}
-        >
-          <ChevronLeft size={20} />
-        </button>
-        <h3 className="text-lg font-semibold text-gray-900">
-          {MONTHS_DE[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-        </h3>
-        <button onClick={handleNextMonth} className="p-2 rounded-lg hover:bg-gray-100">
-          <ChevronRight size={20} />
-        </button>
-      </div>
-
-      {/* Day headers */}
-      <div className="grid grid-cols-7 gap-1 mb-2">
-        {DAYS_DE.map(day => (
-          <div key={day} className="text-center text-xs font-medium text-gray-500 py-2">{day}</div>
-        ))}
-      </div>
-
-      {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-1">
-        {days.map((date, index) => {
-          if (!date) {
-            return <div key={`empty-${index}`} className="h-10"></div>;
-          }
-          
-          const isPast = isDatePast(date);
-          const isBusy = isDateBusy(date);
-          const isSelected = isDateSelected(date);
-          const dayNum = date.getDate();
-          
-          return (
-            <button
-              key={formatDateString(date)}
-              onClick={() => !isPast && !isBusy && onSelectDate(formatDateString(date))}
-              disabled={isPast || isBusy}
-              className={`h-10 rounded-lg text-sm font-medium transition-all relative
-                ${isPast ? 'text-gray-300 cursor-not-allowed' : ''}
-                ${isBusy && !isPast ? 'bg-red-100 text-red-400 cursor-not-allowed' : ''}
-                ${!isPast && !isBusy && !isSelected ? 'text-gray-900 hover:bg-amber-50 hover:text-amber-600' : ''}
-                ${isSelected ? 'bg-amber-500 text-white shadow-md' : ''}
-              `}
-              data-testid={`calendar-day-${dayNum}`}
-            >
-              {dayNum}
-              {isBusy && !isPast && (
-                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-red-400 rounded-full"></span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-amber-500 rounded"></div>
-          <span className="text-gray-600">Ausgewählt</span>
+    <>
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <button 
+            onClick={handlePrevMonth} 
+            disabled={!canGoPrev}
+            className={`p-2 rounded-lg ${canGoPrev ? 'hover:bg-gray-100' : 'opacity-30 cursor-not-allowed'}`}
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <h3 className="text-lg font-semibold text-gray-900">
+            {MONTHS_DE[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+          </h3>
+          <button onClick={handleNextMonth} className="p-2 rounded-lg hover:bg-gray-100">
+            <ChevronRight size={20} />
+          </button>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-red-100 rounded relative">
-            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-red-400 rounded-full"></span>
+
+        {/* Day headers */}
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {DAYS_DE.map(day => (
+            <div key={day} className="text-center text-xs font-medium text-gray-500 py-2">{day}</div>
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {days.map((date, index) => {
+            if (!date) {
+              return <div key={`empty-${index}`} className="h-10"></div>;
+            }
+            
+            const isPast = isDatePast(date);
+            const isFullyBooked = isDateFullyBooked(date);
+            const isPartiallyBusy = isDatePartiallyBusy(date);
+            const isSelected = isDateSelected(date);
+            const dayNum = date.getDate();
+            
+            return (
+              <button
+                key={formatDateString(date)}
+                onClick={() => !isPast && handleDateClick(date)}
+                disabled={isPast}
+                className={`h-10 rounded-lg text-sm font-medium transition-all relative
+                  ${isPast ? 'text-gray-300 cursor-not-allowed' : ''}
+                  ${isFullyBooked && !isPast ? 'bg-red-100 text-red-400' : ''}
+                  ${isPartiallyBusy && !isPast && !isSelected ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : ''}
+                  ${!isPast && !isFullyBooked && !isPartiallyBusy && !isSelected ? 'text-gray-900 hover:bg-amber-50 hover:text-amber-600' : ''}
+                  ${isSelected ? 'bg-amber-500 text-white shadow-md' : ''}
+                  ${!isPast && (isFullyBooked || isPartiallyBusy) ? 'cursor-pointer' : ''}
+                `}
+                data-testid={`calendar-day-${dayNum}`}
+              >
+                {dayNum}
+                {isFullyBooked && !isPast && (
+                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-red-500 rounded-full"></span>
+                )}
+                {isPartiallyBusy && !isPast && !isSelected && (
+                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-amber-500 rounded-full"></span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-gray-100 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-amber-500 rounded"></div>
+            <span className="text-gray-600">Ausgewählt</span>
           </div>
-          <span className="text-gray-600">Belegt</span>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-amber-100 rounded relative">
+              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-amber-500 rounded-full"></span>
+            </div>
+            <span className="text-gray-600">Teilweise belegt</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-red-100 rounded relative">
+              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-red-500 rounded-full"></span>
+            </div>
+            <span className="text-gray-600">Voll belegt</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>
+            <span className="text-gray-600">Frei</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>
-          <span className="text-gray-600">Verfügbar</span>
-        </div>
+
+        <p className="text-xs text-gray-400 mt-3">Klicke auf einen Tag um die verfügbaren Zeiten zu sehen</p>
       </div>
-    </div>
+
+      {/* Day Details Modal */}
+      {showDayModal && (
+        <DayDetailsModal
+          date={showDayModal}
+          bookings={busyDates}
+          onClose={() => setShowDayModal(null)}
+          onSelectSlot={handleSlotSelect}
+        />
+      )}
+    </>
   );
 };
 
@@ -748,6 +955,16 @@ const BookingPage = () => {
 
   const handleDateSelect = (dateStr) => {
     setForm(prev => ({ ...prev, booking_date: dateStr }));
+    setError("");
+  };
+
+  const handleSlotSelect = (dateStr, startTime, timeBlock = "4h") => {
+    setForm(prev => ({ 
+      ...prev, 
+      booking_date: dateStr,
+      start_time: startTime,
+      time_block: timeBlock
+    }));
     setError("");
   };
 
@@ -827,6 +1044,7 @@ const BookingPage = () => {
                   <BookingCalendar 
                     selectedDate={form.booking_date} 
                     onSelectDate={handleDateSelect}
+                    onSelectSlot={handleSlotSelect}
                     busyDates={busyDates}
                   />
                 )}
