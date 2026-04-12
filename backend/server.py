@@ -51,6 +51,19 @@ class BookingCreate(BaseModel):
     cleaning_addon: bool = False
     special_requests: Optional[str] = None
 
+class ExternalBookingCreate(BaseModel):
+    booking_date: str  # YYYY-MM-DD
+    time_block: str  # "4h" or "24h"
+    start_time: str  # HH:MM
+    event_type: str
+    expected_guests: int
+    cleaning_addon: bool = False
+    special_requests: Optional[str] = None
+    # External user contact info
+    name: str
+    email: EmailStr
+    phone: str
+
 class ContactMessage(BaseModel):
     name: str
     email: EmailStr
@@ -301,6 +314,21 @@ async def check_price(
     
     return calculate_price(time_block, booking_date, is_member, cleaning)
 
+@app.post("/api/bookings/check-prices")
+async def check_both_prices(
+    booking_date: str,
+    time_block: str,
+    cleaning: bool = False
+):
+    """Calculate both member and external prices for comparison"""
+    member_price = calculate_price(time_block, booking_date, True, cleaning)
+    external_price = calculate_price(time_block, booking_date, False, cleaning)
+    
+    return {
+        "member": member_price,
+        "external": external_price
+    }
+
 @app.post("/api/bookings/check-availability")
 async def check_avail(booking_date: str, start_time: str, time_block: str):
     """Check if a time slot is available"""
@@ -309,7 +337,7 @@ async def check_avail(booking_date: str, start_time: str, time_block: str):
 
 @app.post("/api/bookings")
 async def create_booking(booking: BookingCreate, token: str):
-    """Create a new booking"""
+    """Create a new booking for registered users"""
     user = get_current_user(token)
     if not user:
         raise HTTPException(401, "Bitte einloggen um zu buchen")
@@ -364,6 +392,63 @@ async def create_booking(booking: BookingCreate, token: str):
     del booking_doc["_id"]
     
     return {"message": "Buchung erfolgreich", "booking": booking_doc}
+
+@app.post("/api/bookings/external")
+async def create_external_booking(booking: ExternalBookingCreate):
+    """Create a booking for external (non-registered) users"""
+    
+    # Check availability
+    available, message = check_availability(booking.booking_date, booking.start_time, booking.time_block)
+    if not available:
+        raise HTTPException(400, message)
+    
+    # Calculate price for external users (is_member=False)
+    price = calculate_price(
+        booking.time_block,
+        booking.booking_date,
+        False,  # External users are not members
+        booking.cleaning_addon
+    )
+    
+    # Calculate end time
+    start_dt = datetime.strptime(f"{booking.booking_date} {booking.start_time}", "%Y-%m-%d %H:%M")
+    hours = 4 if booking.time_block == "4h" else 24
+    end_dt = start_dt + timedelta(hours=hours)
+    
+    # Generate reference number
+    count = db.bookings.count_documents({}) + 1
+    ref_number = f"RH-{datetime.now().year}-{count:04d}"
+    
+    booking_doc = {
+        "reference_number": ref_number,
+        "user_id": "external",
+        "user_name": booking.name,
+        "user_email": booking.email,
+        "user_phone": booking.phone,
+        "booking_date": booking.booking_date,
+        "start_time": booking.start_time,
+        "end_time": end_dt.strftime("%H:%M"),
+        "time_block": booking.time_block,
+        "event_type": booking.event_type,
+        "expected_guests": booking.expected_guests,
+        "cleaning_addon": booking.cleaning_addon,
+        "special_requests": booking.special_requests,
+        "rental_price": price["rental_price"],
+        "cleaning_price": price["cleaning_price"],
+        "total_price": price["total"],
+        "deposit": DEPOSIT,
+        "is_member": False,
+        "is_external": True,
+        "status": "pending",  # External bookings need confirmation
+        "payment_status": "pending",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    result = db.bookings.insert_one(booking_doc)
+    booking_doc["id"] = str(result.inserted_id)
+    del booking_doc["_id"]
+    
+    return {"message": "Anfrage gesendet! Wir melden uns zur Bestätigung.", "booking": booking_doc}
 
 @app.get("/api/bookings/my")
 async def get_my_bookings(token: str):

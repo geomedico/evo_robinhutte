@@ -59,6 +59,22 @@ const AuthProvider = ({ children }) => {
   );
 };
 
+// ==================== LOGO COMPONENT ====================
+const EvoLogo = ({ size = "md" }) => {
+  const sizes = {
+    sm: "h-8",
+    md: "h-10 md:h-12",
+    lg: "h-14 md:h-16"
+  };
+  return (
+    <img 
+      src="https://customer-assets.emergentagent.com/job_elternverein-og/artifacts/io84x5w7_Logo_EVO_Neu_mobile.jpg" 
+      alt="Elternvereinigung Oberglatt"
+      className={`${sizes[size]} w-auto object-contain`}
+    />
+  );
+};
+
 // ==================== HEADER ====================
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -72,13 +88,7 @@ const Header = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           <Link to="/" className="flex items-center gap-3" data-testid="logo">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full flex items-center justify-center">
-              <span className="text-white font-bold text-lg md:text-xl">E</span>
-            </div>
-            <div className="hidden sm:block">
-              <p className="font-semibold text-gray-900 text-sm md:text-base">Elternvereinigung</p>
-              <p className="text-xs text-gray-500">Oberglatt</p>
-            </div>
+            <EvoLogo size="md" />
           </Link>
 
           <nav className="hidden md:flex items-center gap-6" data-testid="desktop-nav">
@@ -185,13 +195,11 @@ const Footer = () => {
         <div className="grid md:grid-cols-4 gap-8 mb-12">
           <div className="md:col-span-2">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-bold">E</span>
-              </div>
-              <div>
-                <p className="font-semibold">Elternvereinigung</p>
-                <p className="text-sm text-gray-400">Oberglatt</p>
-              </div>
+              <img 
+                src="https://customer-assets.emergentagent.com/job_elternverein-og/artifacts/io84x5w7_Logo_EVO_Neu_mobile.jpg" 
+                alt="Elternvereinigung Oberglatt"
+                className="h-12 w-auto object-contain bg-white rounded-lg p-1"
+              />
             </div>
             <p className="text-gray-400 max-w-sm">Gemeinschaft von Eltern für Kinder in Oberglatt.</p>
           </div>
@@ -891,7 +899,8 @@ const BookingPage = () => {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [price, setPrice] = useState(null);
+  const [memberPrice, setMemberPrice] = useState(null);
+  const [externalPrice, setExternalPrice] = useState(null);
   const [busyDates, setBusyDates] = useState([]);
   const [calendarLoading, setCalendarLoading] = useState(true);
   
@@ -902,14 +911,12 @@ const BookingPage = () => {
     event_type: "Geburtstag",
     expected_guests: 20,
     cleaning_addon: false,
-    special_requests: ""
+    special_requests: "",
+    // External user fields
+    name: "",
+    email: "",
+    phone: ""
   });
-
-  useEffect(() => {
-    if (!user) {
-      navigate("/login?redirect=/robihuette/buchen");
-    }
-  }, [user, navigate]);
 
   // Seed bookings and load availability on mount
   useEffect(() => {
@@ -940,13 +947,18 @@ const BookingPage = () => {
     loadData();
   }, []);
 
+  // Load prices for both user types
   useEffect(() => {
     if (form.booking_date && form.time_block) {
-      axios.post(`${API}/bookings/check-price?booking_date=${form.booking_date}&time_block=${form.time_block}&cleaning=${form.cleaning_addon}&token=${token}`)
-        .then(res => setPrice(res.data))
+      // Get both member and external prices
+      axios.post(`${API}/bookings/check-prices?booking_date=${form.booking_date}&time_block=${form.time_block}&cleaning=${form.cleaning_addon}`)
+        .then(res => {
+          setMemberPrice(res.data.member);
+          setExternalPrice(res.data.external);
+        })
         .catch(console.error);
     }
-  }, [form.booking_date, form.time_block, form.cleaning_addon, token]);
+  }, [form.booking_date, form.time_block, form.cleaning_addon]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -991,6 +1003,14 @@ const BookingPage = () => {
     } else if (step === 2) {
       if (form.expected_guests < 1) { setError("Bitte Gästeanzahl angeben"); return; }
       setStep(3);
+    } else if (step === 3) {
+      // Validate external user fields if not logged in
+      if (!user) {
+        if (!form.name.trim()) { setError("Bitte Name eingeben"); return; }
+        if (!form.email.trim()) { setError("Bitte E-Mail eingeben"); return; }
+        if (!form.phone.trim()) { setError("Bitte Telefon eingeben"); return; }
+      }
+      setStep(4);
     }
   };
 
@@ -998,8 +1018,34 @@ const BookingPage = () => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.post(`${API}/bookings?token=${token}`, form);
-      navigate("/buchung-bestaetigung", { state: { booking: res.data.booking } });
+      let res;
+      if (user) {
+        // Registered user booking
+        res = await axios.post(`${API}/bookings?token=${token}`, {
+          booking_date: form.booking_date,
+          time_block: form.time_block,
+          start_time: form.start_time,
+          event_type: form.event_type,
+          expected_guests: form.expected_guests,
+          cleaning_addon: form.cleaning_addon,
+          special_requests: form.special_requests
+        });
+      } else {
+        // External user booking
+        res = await axios.post(`${API}/bookings/external`, {
+          booking_date: form.booking_date,
+          time_block: form.time_block,
+          start_time: form.start_time,
+          event_type: form.event_type,
+          expected_guests: form.expected_guests,
+          cleaning_addon: form.cleaning_addon,
+          special_requests: form.special_requests,
+          name: form.name,
+          email: form.email,
+          phone: form.phone
+        });
+      }
+      navigate("/buchung-bestaetigung", { state: { booking: res.data.booking, isExternal: !user } });
     } catch (err) {
       setError(err.response?.data?.detail || "Buchung fehlgeschlagen");
     } finally {
@@ -1007,20 +1053,46 @@ const BookingPage = () => {
     }
   };
 
-  if (!user) return null;
+  const currentPrice = user ? memberPrice : externalPrice;
+  const totalSteps = user ? 3 : 4;
 
   return (
     <div className="pt-20 min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Robihütte buchen</h1>
-        <p className="text-gray-600 mb-8">Schritt {step} von 3</p>
+        <p className="text-gray-600 mb-8">Schritt {step} von {totalSteps}</p>
 
         {/* Progress */}
         <div className="flex gap-2 mb-8">
-          {[1,2,3].map(s => (
+          {Array.from({length: totalSteps}, (_, i) => i + 1).map(s => (
             <div key={s} className={`flex-1 h-2 rounded-full ${s <= step ? 'bg-amber-500' : 'bg-gray-200'}`}></div>
           ))}
         </div>
+
+        {/* User status banner */}
+        {!user && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle size={20} className="text-blue-600 mt-0.5" />
+              <div>
+                <p className="text-blue-800 font-medium">Sie buchen als Gast (Externer Preis)</p>
+                <p className="text-blue-600 text-sm mt-1">
+                  <Link to="/login?redirect=/robihuette/buchen" className="underline">Anmelden</Link> oder{' '}
+                  <Link to="/mitglied-werden" className="underline">Mitglied werden</Link> für günstigere Preise!
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {user && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <Check size={20} className="text-green-600" />
+              <p className="text-green-800 font-medium">Eingeloggt als {user.name} – Mitgliederpreis aktiv!</p>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6 flex items-center gap-2">
@@ -1079,11 +1151,25 @@ const BookingPage = () => {
                 </div>
               )}
 
-              {price && form.booking_date && (
-                <div className="bg-amber-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Geschätzter Preis:</p>
-                  <p className="text-2xl font-bold text-amber-600">CHF {price.total}</p>
-                  <p className="text-sm text-gray-500">{user?.is_member ? "Mitgliederpreis" : "Externer Preis"}</p>
+              {/* Price comparison */}
+              {form.booking_date && memberPrice && externalPrice && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className={`p-4 rounded-lg border-2 ${user ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Users size={16} className="text-green-600" />
+                      <span className="text-sm font-medium text-gray-700">Mitglieder</span>
+                    </div>
+                    <p className="text-2xl font-bold text-green-600">CHF {memberPrice.total}</p>
+                    {user && <p className="text-xs text-green-600 mt-1">Ihr Preis!</p>}
+                  </div>
+                  <div className={`p-4 rounded-lg border-2 ${!user ? 'border-amber-500 bg-amber-50' : 'border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <User size={16} className="text-amber-600" />
+                      <span className="text-sm font-medium text-gray-700">Externe</span>
+                    </div>
+                    <p className="text-2xl font-bold text-amber-600">CHF {externalPrice.total}</p>
+                    {!user && <p className="text-xs text-amber-600 mt-1">Ihr Preis als Gast</p>}
+                  </div>
                 </div>
               )}
             </div>
@@ -1115,7 +1201,32 @@ const BookingPage = () => {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 3 && !user && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold">Ihre Kontaktdaten</h2>
+              <p className="text-sm text-gray-500">Da Sie nicht angemeldet sind, benötigen wir Ihre Kontaktdaten für die Buchung.</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                <input type="text" name="name" value={form.name} onChange={handleChange} required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" placeholder="Ihr vollständiger Name" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">E-Mail *</label>
+                <input type="email" name="email" value={form.email} onChange={handleChange} required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" placeholder="ihre@email.ch" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Telefon *</label>
+                <input type="tel" name="phone" value={form.phone} onChange={handleChange} required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" placeholder="+41 79 123 45 67" />
+              </div>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Tipp:</strong> Als Mitglied sparen Sie bis zu CHF {externalPrice && memberPrice ? externalPrice.total - memberPrice.total : 40}! 
+                  <Link to="/mitglied-werden" className="underline ml-1">Jetzt Mitglied werden</Link>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {((step === 3 && user) || (step === 4 && !user)) && (
             <div className="space-y-6">
               <h2 className="text-xl font-semibold">Zusammenfassung</h2>
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
@@ -1123,16 +1234,34 @@ const BookingPage = () => {
                 <div className="flex justify-between"><span className="text-gray-600">Zeitblock:</span><span className="font-medium">{form.time_block === "4h" ? `4h ab ${form.start_time}` : "24h (09:00-09:00)"}</span></div>
                 <div className="flex justify-between"><span className="text-gray-600">Anlass:</span><span className="font-medium">{form.event_type}</span></div>
                 <div className="flex justify-between"><span className="text-gray-600">Gäste:</span><span className="font-medium">{form.expected_guests}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">Reinigung:</span><span className="font-medium">{form.cleaning_addon ? "Ja" : "Nein"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Reinigung:</span><span className="font-medium">{form.cleaning_addon ? "Ja (+CHF 60)" : "Nein"}</span></div>
+                {!user && (
+                  <>
+                    <div className="border-t pt-3">
+                      <div className="flex justify-between"><span className="text-gray-600">Name:</span><span className="font-medium">{form.name}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">E-Mail:</span><span className="font-medium">{form.email}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Telefon:</span><span className="font-medium">{form.phone}</span></div>
+                    </div>
+                  </>
+                )}
                 <div className="border-t pt-3 mt-3">
-                  <div className="flex justify-between"><span className="text-gray-600">Miete:</span><span>CHF {price?.rental_price}</span></div>
-                  {form.cleaning_addon && <div className="flex justify-between"><span className="text-gray-600">Reinigung:</span><span>CHF {price?.cleaning_price}</span></div>}
-                  <div className="flex justify-between font-bold text-lg mt-2"><span>Total:</span><span className="text-amber-600">CHF {price?.total}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Miete:</span><span>CHF {currentPrice?.rental_price}</span></div>
+                  {form.cleaning_addon && <div className="flex justify-between"><span className="text-gray-600">Reinigung:</span><span>CHF {currentPrice?.cleaning_price}</span></div>}
+                  <div className="flex justify-between font-bold text-lg mt-2">
+                    <span>Total:</span>
+                    <span className={user ? "text-green-600" : "text-amber-600"}>CHF {currentPrice?.total}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{user ? "Mitgliederpreis" : "Externer Preis"}</p>
                 </div>
               </div>
               <div className="bg-amber-50 p-4 rounded-lg">
                 <p className="text-sm text-amber-800"><strong>Hinweis:</strong> Die Kaution von CHF 250 ist bei der Schlüsselübergabe in bar zu bezahlen.</p>
               </div>
+              {!user && (
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <p className="text-sm text-blue-800"><strong>Externe Buchung:</strong> Ihre Anfrage wird geprüft und wir melden uns zur Bestätigung per E-Mail.</p>
+                </div>
+              )}
               <div className="flex items-start gap-3">
                 <input type="checkbox" id="terms" required className="w-5 h-5 text-amber-500 rounded mt-0.5" />
                 <label htmlFor="terms" className="text-sm text-gray-600">Ich akzeptiere die Mietbedingungen und die Hausordnung der Robihütte.</label>
@@ -1147,13 +1276,13 @@ const BookingPage = () => {
               </button>
             )}
             <div className="ml-auto">
-              {step < 3 ? (
+              {step < totalSteps ? (
                 <button onClick={handleNext} className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-full font-medium transition-all flex items-center gap-2">
                   Weiter <ChevronRight size={20} />
                 </button>
               ) : (
                 <button onClick={handleSubmit} disabled={loading} className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-full font-medium transition-all disabled:opacity-50">
-                  {loading ? "Wird gebucht..." : "Jetzt buchen"}
+                  {loading ? "Wird gebucht..." : (user ? "Jetzt buchen" : "Anfrage senden")}
                 </button>
               )}
             </div>
@@ -1168,6 +1297,7 @@ const BookingPage = () => {
 const BookingConfirmation = () => {
   const location = useLocation();
   const booking = location.state?.booking;
+  const isExternal = location.state?.isExternal;
 
   if (!booking) {
     return (
@@ -1184,11 +1314,18 @@ const BookingConfirmation = () => {
     <div className="pt-20 min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto px-4 py-12">
         <div className="bg-white rounded-2xl p-8 shadow-sm text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Check size={40} className="text-green-600" />
+          <div className={`w-20 h-20 ${isExternal ? 'bg-amber-100' : 'bg-green-100'} rounded-full flex items-center justify-center mx-auto mb-6`}>
+            {isExternal ? <Clock size={40} className="text-amber-600" /> : <Check size={40} className="text-green-600" />}
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Buchung bestätigt!</h1>
-          <p className="text-gray-600 mb-6">Vielen Dank für Ihre Reservation.</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            {isExternal ? "Anfrage gesendet!" : "Buchung bestätigt!"}
+          </h1>
+          <p className="text-gray-600 mb-6">
+            {isExternal 
+              ? "Vielen Dank für Ihre Anfrage. Wir prüfen die Verfügbarkeit und melden uns per E-Mail." 
+              : "Vielen Dank für Ihre Reservation."
+            }
+          </p>
           
           <div className="bg-gray-50 rounded-lg p-6 text-left mb-6">
             <p className="text-sm text-gray-500 mb-1">Buchungsnummer</p>
@@ -1198,20 +1335,35 @@ const BookingConfirmation = () => {
               <div className="flex justify-between"><span className="text-gray-600">Datum:</span><span>{booking.booking_date}</span></div>
               <div className="flex justify-between"><span className="text-gray-600">Zeit:</span><span>{booking.start_time} - {booking.end_time}</span></div>
               <div className="flex justify-between"><span className="text-gray-600">Total:</span><span className="font-bold">CHF {booking.total_price}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Status:</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs ${isExternal ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                  {isExternal ? "Ausstehend" : "Bestätigt"}
+                </span>
+              </div>
             </div>
           </div>
 
           <div className="bg-amber-50 p-4 rounded-lg text-left text-sm text-amber-800 mb-6">
             <strong>Nächste Schritte:</strong>
             <ul className="mt-2 space-y-1">
-              <li>• Sie erhalten eine Bestätigung per E-Mail</li>
-              <li>• Kaution CHF 250 bar bei Schlüsselübergabe mitbringen</li>
-              <li>• Bei Fragen: robihuette@elternvereinigung.ch</li>
+              {isExternal ? (
+                <>
+                  <li>• Sie erhalten eine Bestätigung per E-Mail nach Prüfung</li>
+                  <li>• Bei Fragen: robihuette@elternvereinigung.ch</li>
+                  <li>• Kaution CHF 250 bar bei Schlüsselübergabe mitbringen</li>
+                </>
+              ) : (
+                <>
+                  <li>• Sie erhalten eine Bestätigung per E-Mail</li>
+                  <li>• Kaution CHF 250 bar bei Schlüsselübergabe mitbringen</li>
+                  <li>• Bei Fragen: robihuette@elternvereinigung.ch</li>
+                </>
+              )}
             </ul>
           </div>
 
           <div className="flex gap-4 justify-center">
-            <Link to="/meine-buchungen" className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-full font-medium">Meine Buchungen</Link>
+            {!isExternal && <Link to="/meine-buchungen" className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-full font-medium">Meine Buchungen</Link>}
             <Link to="/" className="text-gray-600 hover:text-gray-900 px-6 py-3">Zur Startseite</Link>
           </div>
         </div>

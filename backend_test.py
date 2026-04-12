@@ -319,6 +319,77 @@ class EVOAPITester:
 
     # ==================== MAIN TEST RUNNER ====================
     
+    def test_price_comparison_endpoint(self):
+        """Test the price comparison endpoint for both member and external prices"""
+        tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        success, response = self.run_test(
+            "Price Comparison Endpoint", 
+            "POST", 
+            f"api/bookings/check-prices?booking_date={tomorrow}&time_block=4h&cleaning=false", 
+            200
+        )
+        if success and response:
+            if 'member' in response and 'external' in response:
+                member_total = response['member'].get('total', 0)
+                external_total = response['external'].get('total', 0)
+                self.log_test(f"Member price: CHF {member_total}", member_total == 80)
+                self.log_test(f"External price: CHF {external_total}", external_total == 120)
+                if member_total == 80 and external_total == 120:
+                    self.log_test("Price comparison working correctly", True)
+                    return True, response
+                else:
+                    self.log_test(f"Unexpected prices - Member: {member_total}, External: {external_total}", False)
+            else:
+                self.log_test("Missing member/external price comparison", False)
+        else:
+            self.log_test("Price comparison endpoint failed", False)
+        return success, response
+
+    def test_external_booking_endpoint(self):
+        """Test external booking endpoint"""
+        # Use a date further in the future to avoid conflicts
+        future_date = (datetime.now() + timedelta(days=15)).strftime("%Y-%m-%d")
+        booking_data = {
+            "booking_date": future_date,
+            "time_block": "4h",
+            "start_time": "10:00",
+            "event_type": "Geburtstag",
+            "expected_guests": 25,
+            "cleaning_addon": False,
+            "special_requests": "Test external booking",
+            "name": "Test External User",
+            "email": "external@test.ch",
+            "phone": "+41 79 123 45 67"
+        }
+        
+        success, response = self.run_test(
+            "External Booking Creation", 
+            "POST", 
+            "api/bookings/external", 
+            200, 
+            data=booking_data
+        )
+        
+        if success and response:
+            booking = response.get('booking', {})
+            if booking:
+                self.log_test(f"External booking created with reference: {booking.get('reference_number')}", True)
+                self.log_test(f"External booking status: {booking.get('status')}", booking.get('status') == 'pending')
+                self.log_test(f"External booking marked as external: {booking.get('is_external')}", booking.get('is_external') == True)
+                self.log_test(f"External booking total price: CHF {booking.get('total_price')}", booking.get('total_price') == 120)
+                
+                # Check if it's marked as external and pending
+                if booking.get('is_external') and booking.get('status') == 'pending':
+                    self.log_test("External booking correctly marked as pending", True)
+                    return True, response
+                else:
+                    self.log_test("External booking not properly configured", False)
+            else:
+                self.log_test("No booking data in response", False)
+        else:
+            self.log_test("External booking endpoint failed", False)
+        return success, response
+
     def run_all_tests(self):
         """Run all backend tests"""
         print("🚀 Starting EVO Backend API Tests")
@@ -349,6 +420,11 @@ class EVOAPITester:
         self.test_availability_check()
         self.test_create_booking()
         self.test_get_my_bookings()
+        
+        # External booking tests
+        print("\n🌐 External Booking Tests")
+        self.test_price_comparison_endpoint()
+        self.test_external_booking_endpoint()
         
         # Contact tests
         print("\n📧 Contact Tests")
