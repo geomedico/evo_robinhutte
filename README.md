@@ -2,6 +2,38 @@
 
 A full-stack web application for the Elternvereinigung Oberglatt (EVO) parent association in Switzerland. This is a functional draft prototype built to improve upon their existing Wix site.
 
+---
+
+## 🚀 Quick Start
+
+**New to this project?** Start here:
+
+👉 **[START.md](START.md)** - Complete quick start guide with step-by-step instructions
+
+**Key files:**
+- 📖 `START.md` - How to run this project locally
+- 🌐 `WIX_MIGRATION_GUIDE_ENGLISH.md` - Migrate to Wix (English)
+- 🌐 `WIX_MIGRATION_GUIDE_UKRAINIAN.md` - Migrate to Wix (Ukrainian)
+- 📋 `MIGRATION_SUMMARY.md` - Technical migration notes
+
+### Super Quick Start (3 commands)
+
+```bash
+# 1. Install dependencies
+cd backend_node && yarn install && cd ../frontend && yarn install
+
+# 2. Start MongoDB (in separate terminal)
+mongod --bind_ip_all
+
+# 3. Start both servers (in separate terminals)
+cd backend_node && node server.js    # Terminal 1
+cd frontend && yarn start             # Terminal 2
+```
+
+Visit http://localhost:3000 🎉
+
+---
+
 ## 🚀 Technology Stack
 
 ### Frontend
