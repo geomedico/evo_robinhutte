@@ -69,3 +69,12 @@ ENV/
 
 # Emergent specific
 .emergent/
+-e 
+# Environment and credential files
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
