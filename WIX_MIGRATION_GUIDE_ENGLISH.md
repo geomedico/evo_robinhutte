@@ -85,7 +85,7 @@ You need to create **8 collections**. Here's the complete structure:
 
 #### **Collection 1: Mitglieder (Members)**
 
-**Purpose:** Extends Wix Members with custom fields
+**Purpose:** Extends Wix Members with custom fields including family information
 
 **Collection Name:** `Mitglieder`  
 **Permissions:** 
@@ -96,16 +96,25 @@ You need to create **8 collections**. Here's the complete structure:
 
 **Fields:**
 
-| Field Name | Type | Description |
-|-----------|------|-------------|
-| `_id` | Text | Auto-generated ID (default) |
-| `mitgliedId` | Text | Wix Member ID (connect to user) |
-| `name` | Text | Full name |
-| `email` | Email | Email address |
-| `telefon` | Phone | Phone number |
-| `adresse` | Rich Text | Address |
-| `istMitglied` | Boolean | Is member (always true for registered) |
-| `erstelltAm` | Date | Created date |
+| Field Name | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `_id` | Text | Auto-generated ID (default) | Yes |
+| `mitgliedId` | Text | Wix Member ID (connect to user) | Yes |
+| `name` | Text | Full name | Yes |
+| `email` | Email | Email address | Yes |
+| `adresse` | Text | Street address | Yes |
+| `postleitzahl` | Text | Postal code | Yes |
+| `ort` | Text | City/Town | Yes |
+| `mobil` | Phone | Mobile phone number | Yes |
+| `telefon` | Phone | Alternative phone number | No |
+| `nameKind1` | Text | Child 1 name | No |
+| `geburtsdatumKind1` | Date | Child 1 birthday | No |
+| `nameKind2` | Text | Child 2 name | No |
+| `geburtsdatumKind2` | Date | Child 2 birthday | No |
+| `nameKind3` | Text | Child 3 name | No |
+| `geburtsdatumKind3` | Date | Child 3 birthday | No |
+| `istMitglied` | Boolean | Is member (always true for registered) | Yes |
+| `erstelltAm` | Date | Created date | Yes |
 
 **How to create:**
 
@@ -115,9 +124,12 @@ You need to create **8 collections**. Here's the complete structure:
    - Click **"Add Field"**
    - Choose correct **Type**
    - Set field **Name** (German names as specified)
+   - Mark as **Required** if specified in table above
    - Click **"Add"**
 4. Set **Permissions** as listed above
 5. Click **"Save"**
+
+**Note:** This collection now stores complete family information (one data set per family) including up to 3 children (optional).
 
 ---
 
@@ -277,11 +289,13 @@ You need to create **8 collections**. Here's the complete structure:
 
 | label | zeitBlock | tagLabel | mitgliedPreis | externPreis | zeitNotiz |
 |-------|-----------|----------|---------------|-------------|-----------|
-| 4 Stunden | 4h | Alle Tage | 80 | 120 | Flexible Startzeit |
+| 4 Stunden | 4h | Mo–Do | 80 | 120 | Flexible Startzeit (nur Montag-Donnerstag) |
 | 12 Stunden | 12h | Mo–Do | 120 | 180 | Flexible Startzeit |
 | 12 Stunden | 12h | Fr–So + Feiertage | 150 | 270 | Flexible Startzeit |
 | 24 Stunden | 24h | Mo–Do | 150 | 230 | 09:00 – 09:00 nächster Tag |
 | 24 Stunden | 24h | Fr–So + Feiertage | 200 | 350 | 09:00 – 09:00 nächster Tag |
+
+**Important:** Note that 4h bookings are now restricted to Monday-Thursday only (tagLabel changed from "Alle Tage" to "Mo–Do").
 
 ---
 
@@ -469,6 +483,20 @@ export async function pruefeVerfuegbarkeit(buchungsDatum, startZeit, zeitBlock) 
   const datumCheck = pruefeValidierungDatum(buchungsDatum);
   if (!datumCheck.gueltig) {
     return { verfuegbar: false, nachricht: datumCheck.nachricht };
+  }
+  
+  // NEW: Block 4h time blocks on weekends (Friday-Sunday)
+  if (zeitBlock === '4h') {
+    const datum = new Date(buchungsDatum);
+    const wochentag = datum.getDay(); // 0=Sunday, 5=Friday, 6=Saturday
+    
+    // Check if it's Friday (5), Saturday (6), or Sunday (0)
+    if (wochentag === 0 || wochentag === 5 || wochentag === 6) {
+      return { 
+        verfuegbar: false, 
+        nachricht: '4-Stunden-Buchungen sind nur von Montag bis Donnerstag möglich. Bitte wählen Sie 12h oder 24h für Wochenenden.' 
+      };
+    }
   }
   
   // Get existing bookings for this date
@@ -1008,7 +1036,7 @@ If you want custom hover effects, click any element → **"Advanced Settings"** 
 
 #### Pricing Cards (Robihütte Page)
 
-This is crucial! The pricing display must match your current design.
+This is crucial! The pricing display must match your current design **and only show member prices to logged-in users**.
 
 1. **Add Repeater:**
    - Connect to **"Preise"** collection
@@ -1018,24 +1046,58 @@ This is crucial! The pricing display must match your current design.
    - Border: 2px solid `#E5E7EB` (gray)
    - Border radius: 12px
    - Padding: 16px
-   - **For member price:** Border color `#10B981` (green) when selected
+   - **For member price:** Border color `#10B981` (green) when logged in
    - **For external price:** Border color `#F59E0B` (orange)
 
 3. **Inside Each Card:**
    - **Time block label:** Connect to `label` (e.g., "4 Stunden")
-   - **Day label:** Connect to `tagLabel` (e.g., "Alle Tage")
-   - **Member price:** 
+   - **Day label:** Connect to `tagLabel` (e.g., "Mo–Do" for 4h)
+   - **Member price (conditional):** 
+     - Only show if user is logged in
      - Text: "CHF" + `mitgliedPreis` field
      - Color: Green `#10B981`
      - Size: 24px, bold
    - **External price:**
+     - Always visible
      - Text: "CHF" + `externPreis` field
      - Color: Orange `#F59E0B`
      - Size: 20px
 
-4. **Two-column layout:**
-   - Left column: "Mitglieder" header
-   - Right column: "Externe" header
+4. **Conditional Display Code:**
+
+```javascript
+import wixUsers from 'wix-users';
+
+$w.onReady(async function () {
+  const istAngemeldet = wixUsers.currentUser.loggedIn;
+  
+  // Set up repeater
+  $w('#pricingRepeater').onItemReady(($item, itemData) => {
+    // Always show external price
+    $item('#externalPrice').text = `CHF ${itemData.externPreis}`;
+    
+    // Only show member price if logged in
+    if (istAngemeldet) {
+      $item('#memberPrice').text = `CHF ${itemData.mitgliedPreis}`;
+      $item('#memberPrice').show();
+      $item('#memberLabel').show();
+    } else {
+      $item('#memberPrice').hide();
+      $item('#memberLabel').hide();
+      $item('#loginPrompt').text = 'Mitglieder erhalten reduzierte Preise';
+      $item('#loginPrompt').show();
+    }
+  });
+});
+```
+
+5. **Two-column layout (when logged in):**
+   - Left column: "Mitglieder" header + member prices (green)
+   - Right column: "Externe" header + external prices (orange)
+
+6. **Single-column layout (when not logged in):**
+   - Only show external prices
+   - Display message: "Bitte anmelden um Mitgliederpreise zu sehen"
 
 ---
 
@@ -1135,16 +1197,82 @@ async function syncMitglied() {
 
 ### Step 5.2: Registration Flow
 
-Wix handles registration automatically with the Login Bar. But you can customize:
+Wix handles registration automatically with the Login Bar. But you need to customize it to collect family information:
 
 1. **Customize Registration Form:**
    - Click **Login Bar** → **Settings** → **"Sign Up & Login"**
-   - Add custom fields: Name, Phone, Address
-   - Make fields required/optional
+   - Click **"Customize Sign Up Form"**
+   - Add custom fields:
+     - **Adresse** (Text, Required)
+     - **Postleitzahl** (Text, Required)
+     - **Ort** (Text, Required)
+     - **Mobil** (Phone, Required)
+     - **Name Kind 1** (Text, Optional)
+     - **Geburtstag Kind 1** (Date, Optional)
+     - **Name Kind 2** (Text, Optional)
+     - **Geburtstag Kind 2** (Date, Optional)
+     - **Name Kind 3** (Text, Optional)
+     - **Geburtstag Kind 3** (Date, Optional)
 
-2. **Registration Confirmation Email:**
+2. **Map to Mitglieder Collection:**
+   
+After registration, sync data to Mitglieder collection in `site.js`:
+
+```javascript
+// Filename: site.js (Site-wide code)
+import wixUsers from 'wix-users';
+import wixData from 'wix-data';
+
+$w.onReady(function () {
+  if (wixUsers.currentUser.loggedIn) {
+    syncMitgliedWithFamilyData();
+  }
+});
+
+async function syncMitgliedWithFamilyData() {
+  const benutzer = wixUsers.currentUser;
+  const mitgliedId = benutzer.id;
+  
+  // Get user profile data
+  const profile = await benutzer.getProfile();
+  
+  // Check if user already exists in Mitglieder
+  const ergebnis = await wixData.query('Mitglieder')
+    .eq('mitgliedId', mitgliedId)
+    .find();
+  
+  if (ergebnis.items.length === 0) {
+    // Create new member record with family data
+    const neuesMitglied = {
+      mitgliedId: mitgliedId,
+      name: profile.name || await benutzer.getEmail(),
+      email: await benutzer.getEmail(),
+      adresse: profile.customFields.adresse || '',
+      postleitzahl: profile.customFields.postleitzahl || '',
+      ort: profile.customFields.ort || '',
+      mobil: profile.customFields.mobil || '',
+      telefon: profile.phone || null,
+      // Children data (optional)
+      nameKind1: profile.customFields.nameKind1 || null,
+      geburtsdatumKind1: profile.customFields.geburtsdatumKind1 || null,
+      nameKind2: profile.customFields.nameKind2 || null,
+      geburtsdatumKind2: profile.customFields.geburtsdatumKind2 || null,
+      nameKind3: profile.customFields.nameKind3 || null,
+      geburtsdatumKind3: profile.customFields.geburtsdatumKind3 || null,
+      istMitglied: true,
+      erstelltAm: new Date()
+    };
+    
+    await wixData.insert('Mitglieder', neuesMitglied);
+    console.log('Neues Mitglied mit Familiendaten erstellt:', mitgliedId);
+  }
+}
+```
+
+3. **Registration Confirmation Email:**
    - Go to **"Settings"** → **"Members & Badges"** → **"Email Settings"**
    - Customize welcome email text (in German)
+   - Include confirmation of family data received
 
 ---
 
@@ -1343,11 +1471,12 @@ function istVergangenheit(datum) {
 
 ### Step 6.3: Time Block Selection
 
-After user selects a date, show time block options:
+After user selects a date, show time block options **with weekend restrictions**:
 
 ```javascript
-// Add time block buttons (4h, 12h weekday, 12h weekend, 24h weekday, 24h weekend)
+// Add time block buttons with weekend logic
 import { vergleichePreise } from 'backend/buchungsLogik';
+import wixUsers from 'wix-users';
 
 let ausgewaehlterBlock = null;
 
@@ -1356,19 +1485,34 @@ $w.onReady(function () {
 });
 
 async function setupZeitblockButtons() {
-  // 4h button
+  // Check if selected date is weekend
+  const selectedDate = new Date(ausgewaehltesDatum);
+  const dayOfWeek = selectedDate.getDay();
+  const isWeekend = (dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6);
+  
+  // Hide or disable 4h button on weekends
+  if (isWeekend) {
+    $w('#block4h').hide(); // Hide 4h option on weekends
+    $w('#weekendNotice').text = 'An Wochenenden (Fr-So) sind nur 12h und 24h Buchungen möglich.';
+    $w('#weekendNotice').show();
+  } else {
+    $w('#block4h').show(); // Show 4h option on weekdays
+    $w('#weekendNotice').hide();
+  }
+  
+  // 4h button (Monday-Thursday only)
   $w('#block4h').onClick(async () => {
     ausgewaehlterBlock = '4h';
     await zeigePreise('4h');
   });
   
-  // 12h button
+  // 12h button (all days)
   $w('#block12h').onClick(async () => {
     ausgewaehlterBlock = '12h';
     await zeigePreise('12h');
   });
   
-  // 24h button
+  // 24h button (all days)
   $w('#block24h').onClick(async () => {
     ausgewaehlterBlock = '24h';
     await zeigePreise('24h');
@@ -1381,21 +1525,27 @@ async function zeigePreise(zeitBlock) {
     return;
   }
   
-  // Get pricing
+  // Get pricing - will return member prices only if logged in
   const preise = await vergleichePreise(zeitBlock, ausgewaehltesDatum, false);
   
   // Check if user is logged in
   const istAngemeldet = wixUsers.currentUser.loggedIn;
   
-  if (istAngemeldet) {
-    // Show member price
+  if (istAngemeldet && preise.mitglied) {
+    // Show member price (user is logged in)
     $w('#priceText').text = `CHF ${preise.mitglied.gesamt}`;
     $w('#priceLabel').text = 'Mitgliederpreis';
+    $w('#priceLabel').style.color = '#10B981'; // Green
+    $w('#externPriceHint').text = `(Externe: CHF ${preise.extern.gesamt})`;
+    $w('#externPriceHint').show();
   } else {
-    // Show external price
+    // Show only external price (not logged in)
     $w('#priceText').text = `CHF ${preise.extern.gesamt}`;
-    $w('#priceLabel').text = 'Extern-Preis';
-    $w('#memberPriceHint').text = `(Mitglieder: CHF ${preise.mitglied.gesamt})`;
+    $w('#priceLabel').text = 'Preis';
+    $w('#priceLabel').style.color = '#F59E0B'; // Orange
+    $w('#loginHint').text = 'Mitglieder erhalten reduzierte Preise - bitte anmelden';
+    $w('#loginHint').show();
+    $w('#externPriceHint').hide();
   }
   
   // Show booking form
@@ -1749,6 +1899,29 @@ Create another automation:
    - Revenue reports
    - Booking statistics
    - Member analytics
+
+---
+
+## 🆕 Recent Feature Updates (December 2025)
+
+**Three major features have been added to this guide:**
+
+### 1. Enhanced Family Registration
+- ✅ Required fields: Adresse, Postleitzahl, Ort, Mobil
+- ✅ Optional fields: Up to 3 children (Name + Birthday each)
+- ✅ One data set per family
+
+### 2. Weekend Booking Restrictions
+- ✅ 4-hour blocks now **blocked for Friday-Sunday**
+- ✅ Only 12h and 24h blocks available on weekends
+- ✅ Clear error message in German
+
+### 3. Member Price Visibility
+- ✅ Member prices **only shown to logged-in users**
+- ✅ Non-logged-in users see only external prices
+- ✅ Login prompt displayed for guests
+
+**All code examples in this guide have been updated to include these features.**
 
 ---
 

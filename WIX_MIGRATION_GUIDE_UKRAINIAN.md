@@ -85,7 +85,7 @@
 
 #### **Колекція 1: Mitglieder (Члени)**
 
-**Призначення:** Розширює Wix Members додатковими полями
+**Призначення:** Розширює Wix Members додатковими полями, включаючи інформацію про сім'ю
 
 **Назва колекції:** `Mitglieder`  
 **Дозволи:** 
@@ -96,16 +96,25 @@
 
 **Поля:**
 
-| Назва поля | Тип | Опис |
-|-----------|------|-------------|
-| `_id` | Text | Автоматично згенерований ID (за замовчуванням) |
-| `mitgliedId` | Text | ID члена Wix (зв'язок з користувачем) |
-| `name` | Text | Повне ім'я |
-| `email` | Email | Email адреса |
-| `telefon` | Phone | Номер телефону |
-| `adresse` | Rich Text | Адреса |
-| `istMitglied` | Boolean | Чи є членом (завжди true для зареєстрованих) |
-| `erstelltAm` | Date | Дата створення |
+| Назва поля | Тип | Опис | Обов'язкове |
+|-----------|------|-------------|------------|
+| `_id` | Text | Автоматично згенерований ID (за замовчуванням) | Так |
+| `mitgliedId` | Text | ID члена Wix (зв'язок з користувачем) | Так |
+| `name` | Text | Повне ім'я | Так |
+| `email` | Email | Email адреса | Так |
+| `adresse` | Text | Адреса вулиці | Так |
+| `postleitzahl` | Text | Поштовий індекс | Так |
+| `ort` | Text | Місто | Так |
+| `mobil` | Phone | Номер мобільного телефону | Так |
+| `telefon` | Phone | Альтернативний номер телефону | Ні |
+| `nameKind1` | Text | Ім'я дитини 1 | Ні |
+| `geburtsdatumKind1` | Date | День народження дитини 1 | Ні |
+| `nameKind2` | Text | Ім'я дитини 2 | Ні |
+| `geburtsdatumKind2` | Date | День народження дитини 2 | Ні |
+| `nameKind3` | Text | Ім'я дитини 3 | Ні |
+| `geburtsdatumKind3` | Date | День народження дитини 3 | Ні |
+| `istMitglied` | Boolean | Чи є членом (завжди true для зареєстрованих) | Так |
+| `erstelltAm` | Date | Дата створення | Так |
 
 **Як створити:**
 
@@ -115,9 +124,12 @@
    - Натисніть **"Add Field"**
    - Виберіть правильний **Type**
    - Встановіть **Name** поля (німецькі назви як зазначено)
+   - Позначте як **Required** якщо вказано в таблиці вище
    - Натисніть **"Add"**
 4. Встановіть **Permissions** як зазначено вище
 5. Натисніть **"Save"**
+
+**Примітка:** Ця колекція тепер зберігає повну інформацію про сім'ю (один набір даних на сім'ю), включаючи до 3 дітей (необов'язково).
 
 ---
 
@@ -277,11 +289,13 @@
 
 | label | zeitBlock | tagLabel | mitgliedPreis | externPreis | zeitNotiz |
 |-------|-----------|----------|---------------|-------------|-----------|
-| 4 Stunden | 4h | Alle Tage | 80 | 120 | Flexible Startzeit |
+| 4 Stunden | 4h | Mo–Do | 80 | 120 | Flexible Startzeit (nur Montag-Donnerstag) |
 | 12 Stunden | 12h | Mo–Do | 120 | 180 | Flexible Startzeit |
 | 12 Stunden | 12h | Fr–So + Feiertage | 150 | 270 | Flexible Startzeit |
 | 24 Stunden | 24h | Mo–Do | 150 | 230 | 09:00 – 09:00 nächster Tag |
 | 24 Stunden | 24h | Fr–So + Feiertage | 200 | 350 | 09:00 – 09:00 nächster Tag |
+
+**Важливо:** Зверніть увагу, що бронювання на 4 години тепер обмежені лише понеділком-четвергом (tagLabel змінено з "Alle Tage" на "Mo–Do").
 
 ---
 
@@ -469,6 +483,20 @@ export async function pruefeVerfuegbarkeit(buchungsDatum, startZeit, zeitBlock) 
   const datumCheck = pruefeValidierungDatum(buchungsDatum);
   if (!datumCheck.gueltig) {
     return { verfuegbar: false, nachricht: datumCheck.nachricht };
+  }
+  
+  // НОВЕ: Блокувати 4-годинні часові блоки на вихідних (П'ятниця-Неділя)
+  if (zeitBlock === '4h') {
+    const datum = new Date(buchungsDatum);
+    const wochentag = datum.getDay(); // 0=Неділя, 5=П'ятниця, 6=Субота
+    
+    // Перевірити чи це П'ятниця (5), Субота (6), або Неділя (0)
+    if (wochentag === 0 || wochentag === 5 || wochentag === 6) {
+      return { 
+        verfuegbar: false, 
+        nachricht: '4-Stunden-Buchungen sind nur von Montag bis Donnerstag möglich. Bitte wählen Sie 12h oder 24h für Wochenenden.' 
+      };
+    }
   }
   
   // Отримати існуючі бронювання для цієї дати
@@ -1300,6 +1328,29 @@ Elternvereinigung Oberglatt
 **Спільнота:**
 - Форум Wix: https://www.wix.com/forum/
 - Приклади Velo: https://www.wix.com/velo/examples
+
+---
+
+## 🆕 Останні оновлення функцій (Грудень 2025)
+
+**Три основні функції були додані до цього посібника:**
+
+### 1. Розширена реєстрація сім'ї
+- ✅ Обов'язкові поля: Adresse, Postleitzahl, Ort, Mobil
+- ✅ Необов'язкові поля: До 3 дітей (Ім'я + День народження кожного)
+- ✅ Один набір даних на сім'ю
+
+### 2. Обмеження бронювання на вихідні
+- ✅ 4-годинні блоки тепер **заблоковані для П'ятниці-Неділі**
+- ✅ Тільки 12г та 24г блоки доступні на вихідних
+- ✅ Чітке повідомлення про помилку німецькою
+
+### 3. Видимість цін для членів
+- ✅ Ціни для членів **показуються тільки авторизованим користувачам**
+- ✅ Неавторизовані користувачі бачать тільки зовнішні ціни
+- ✅ Відображається запрошення увійти для гостей
+
+**Усі приклади коду в цьому посібнику були оновлені з цими функціями.**
 
 ---
 
