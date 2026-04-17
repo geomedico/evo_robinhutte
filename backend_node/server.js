@@ -132,6 +132,20 @@ async function checkAvailability(bookingDate, startTime, timeBlock) {
     return { available: false, message: dateCheck.message };
   }
 
+  // NEW: Block 4h time blocks on weekends (Friday-Sunday)
+  if (timeBlock === '4h') {
+    const date = new Date(bookingDate);
+    const dayOfWeek = date.getDay(); // 0=Sunday, 5=Friday, 6=Saturday
+    
+    // Check if it's Friday (5), Saturday (6), or Sunday (0)
+    if (dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6) {
+      return { 
+        available: false, 
+        message: '4-Stunden-Buchungen sind nur von Montag bis Donnerstag möglich. Bitte wählen Sie 12h oder 24h für Wochenenden.' 
+      };
+    }
+  }
+
   // Get existing bookings
   const existingBookings = await db.collection('bookings').find({
     booking_date: bookingDate,
@@ -218,7 +232,11 @@ async function getCurrentUser(token) {
 app.post('/api/auth/register', [
   body('email').isEmail().withMessage('Ungültige E-Mail'),
   body('password').isLength({ min: 6 }).withMessage('Passwort muss mindestens 6 Zeichen haben'),
-  body('name').notEmpty().withMessage('Name ist erforderlich')
+  body('name').notEmpty().withMessage('Name ist erforderlich'),
+  body('adresse').notEmpty().withMessage('Adresse ist erforderlich'),
+  body('postleitzahl').notEmpty().withMessage('Postleitzahl ist erforderlich'),
+  body('ort').notEmpty().withMessage('Ort ist erforderlich'),
+  body('mobil').notEmpty().withMessage('Mobilnummer ist erforderlich')
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -226,7 +244,13 @@ app.post('/api/auth/register', [
   }
 
   try {
-    const { name, email, password, phone, address } = req.body;
+    const { 
+      name, email, password, phone, 
+      adresse, postleitzahl, ort, mobil,
+      nameKind1, geburtsdatumKind1,
+      nameKind2, geburtsdatumKind2,
+      nameKind3, geburtsdatumKind3
+    } = req.body;
 
     // Check if email exists
     const existingUser = await db.collection('users').findOne({ email });
@@ -237,13 +261,24 @@ app.post('/api/auth/register', [
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user with family information
     const userDoc = {
       name,
       email,
       password: hashedPassword,
-      phone: phone || null,
-      address: address || null,
+      phone: phone || mobil, // Use mobil as primary phone
+      mobil: mobil,
+      adresse: adresse,
+      postleitzahl: postleitzahl,
+      ort: ort,
+      address: `${adresse}, ${postleitzahl} ${ort}`, // Combined address for compatibility
+      // Children information (optional)
+      nameKind1: nameKind1 || null,
+      geburtsdatumKind1: geburtsdatumKind1 || null,
+      nameKind2: nameKind2 || null,
+      geburtsdatumKind2: geburtsdatumKind2 || null,
+      nameKind3: nameKind3 || null,
+      geburtsdatumKind3: geburtsdatumKind3 || null,
       is_member: true, // All registered users are members
       created_at: new Date().toISOString()
     };
@@ -432,15 +467,32 @@ app.post('/api/bookings/check-price', async (req, res) => {
 // Check both prices
 app.post('/api/bookings/check-prices', async (req, res) => {
   try {
-    const { booking_date, time_block, cleaning = false } = req.body;
+    const { booking_date, time_block, cleaning = false, token } = req.body;
     
-    const memberPrice = calculatePrice(time_block, booking_date, true, cleaning);
+    // Check if user is logged in
+    let isLoggedIn = false;
+    if (token) {
+      const user = await getCurrentUser(token);
+      isLoggedIn = user !== null;
+    }
+    
     const externalPrice = calculatePrice(time_block, booking_date, false, cleaning);
-
-    res.json({
-      member: memberPrice,
-      external: externalPrice
-    });
+    
+    // Only return member price if user is logged in
+    if (isLoggedIn) {
+      const memberPrice = calculatePrice(time_block, booking_date, true, cleaning);
+      res.json({
+        member: memberPrice,
+        external: externalPrice,
+        showMemberPrice: true
+      });
+    } else {
+      // Only show external price for non-logged-in users
+      res.json({
+        external: externalPrice,
+        showMemberPrice: false
+      });
+    }
   } catch (error) {
     console.error('Check prices error:', error);
     res.status(500).json({ error: 'Serverfehler' });
@@ -723,20 +775,44 @@ app.get('/api/blog', async (req, res) => {
 });
 
 // Get pricing
-app.get('/api/pricing', (req, res) => {
-  res.json({
-    pricing: [
-      { label: '4 Stunden', time_block: '4h', day_label: 'Alle Tage', member_price: 80, external_price: 120, time_note: 'Flexible Startzeit' },
+app.get('/api/pricing', async (req, res) => {
+  try {
+    // Check if user is logged in via token
+    const token = req.query.token;
+    let showMemberPrice = false;
+    
+    if (token) {
+      const user = await getCurrentUser(token);
+      showMemberPrice = user !== null;
+    }
+    
+    // Base pricing data
+    const pricingData = [
+      { label: '4 Stunden', time_block: '4h', day_label: 'Mo–Do', member_price: 80, external_price: 120, time_note: 'Flexible Startzeit (nur Montag-Donnerstag)' },
       { label: '12 Stunden', time_block: '12h', day_label: 'Mo–Do', member_price: 120, external_price: 180, time_note: 'Flexible Startzeit' },
       { label: '12 Stunden', time_block: '12h', day_label: 'Fr–So + Feiertage', member_price: 150, external_price: 270, time_note: 'Flexible Startzeit' },
       { label: '24 Stunden', time_block: '24h', day_label: 'Mo–Do', member_price: 150, external_price: 230, time_note: '09:00 – 09:00 nächster Tag' },
       { label: '24 Stunden', time_block: '24h', day_label: 'Fr–So + Feiertage', member_price: 200, external_price: 350, time_note: '09:00 – 09:00 nächster Tag' }
-    ],
-    cleaning: { price: CLEANING_PRICE, label: 'Optionale Reinigung' },
-    deposit: { amount: DEPOSIT, note: 'Bar bei Schlüsselübergabe' },
-    buffer: { hours: BUFFER_HOURS, note: 'Pufferzeit zwischen Buchungen' },
-    max_advance_months: MAX_ADVANCE_MONTHS
-  });
+    ];
+    
+    // If not logged in, remove member prices
+    const pricing = showMemberPrice ? pricingData : pricingData.map(p => ({
+      ...p,
+      member_price: undefined
+    }));
+    
+    res.json({
+      pricing,
+      showMemberPrice,
+      cleaning: { price: CLEANING_PRICE, label: 'Optionale Reinigung' },
+      deposit: { amount: DEPOSIT, note: 'Bar bei Schlüsselübergabe' },
+      buffer: { hours: BUFFER_HOURS, note: 'Pufferzeit zwischen Buchungen' },
+      max_advance_months: MAX_ADVANCE_MONTHS
+    });
+  } catch (error) {
+    console.error('Pricing error:', error);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
 });
 
 // ==================== CONTACT ROUTES ====================
