@@ -129,6 +129,11 @@ const Header = () => {
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
+            {user?.is_admin && (
+              <Link to="/admin" className={`flex items-center gap-1 text-sm font-medium ${isActive('/admin') ? 'text-amber-600' : 'text-gray-600 hover:text-amber-600'}`} data-testid="admin-nav-link">
+                Admin
+              </Link>
+            )}
             {user ? (
               <div className="flex items-center gap-3">
                 <Link to="/meine-buchungen" className="flex items-center gap-2 text-gray-600 hover:text-amber-600 text-sm">
@@ -1617,13 +1622,29 @@ const LoginPage = () => {
 const RegisterPage = () => {
   const { register, user } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", address: "" });
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    mobil: "",
+    adresse: "",
+    postleitzahl: "",
+    ort: "",
+    nameKind1: "",
+    geburtsdatumKind1: "",
+    nameKind2: "",
+    geburtsdatumKind2: "",
+    nameKind3: "",
+    geburtsdatumKind3: ""
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (user) navigate("/");
   }, [user, navigate]);
+
+  const setField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1633,44 +1654,94 @@ const RegisterPage = () => {
       await register(form);
       navigate("/");
     } catch (err) {
-      setError(err.response?.data?.detail || "Registrierung fehlgeschlagen");
+      setError(err.response?.data?.error || err.response?.data?.detail || "Registrierung fehlgeschlagen");
     } finally {
       setLoading(false);
     }
   };
 
+  const inputClass = "w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all";
+
   return (
-    <div className="pt-20 min-h-screen bg-gray-50 flex items-center justify-center py-12">
-      <div className="max-w-md w-full mx-4">
-        <div className="bg-white rounded-2xl p-8 shadow-sm">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">Mitglied werden</h1>
+    <div className="pt-20 min-h-screen bg-gray-50 py-12">
+      <div className="max-w-2xl w-full mx-auto px-4">
+        <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2 text-center">Mitglied werden</h1>
           <p className="text-gray-600 text-center mb-6">Werde Teil der EVO-Gemeinschaft</p>
-          {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-              <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+
+          {error && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm flex items-center gap-2" data-testid="register-error">
+              <AlertCircle size={16} />{error}
             </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Account section */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail *</label>
-              <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">Konto</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                  <input type="text" value={form.name} onChange={e => setField("name", e.target.value)} required className={inputClass} data-testid="register-name" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail *</label>
+                  <input type="email" value={form.email} onChange={e => setField("email", e.target.value)} required className={inputClass} data-testid="register-email" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Passwort *</label>
+                  <input type="password" value={form.password} onChange={e => setField("password", e.target.value)} required minLength="6" className={inputClass} data-testid="register-password" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Mobilnummer *</label>
+                  <input type="tel" value={form.mobil} onChange={e => setField("mobil", e.target.value)} required placeholder="+41 79 123 45 67" className={inputClass} data-testid="register-mobil" />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Passwort *</label>
-              <input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required minLength="6" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+
+            {/* Address section */}
+            <div className="pt-2 border-t border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3 mt-4">Adresse</h2>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="md:col-span-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Strasse & Nr. *</label>
+                  <input type="text" value={form.adresse} onChange={e => setField("adresse", e.target.value)} required placeholder="Beispielstrasse 12" className={inputClass} data-testid="register-adresse" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">PLZ *</label>
+                  <input type="text" value={form.postleitzahl} onChange={e => setField("postleitzahl", e.target.value)} required placeholder="8154" className={inputClass} data-testid="register-plz" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ort *</label>
+                  <input type="text" value={form.ort} onChange={e => setField("ort", e.target.value)} required placeholder="Oberglatt" className={inputClass} data-testid="register-ort" />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
-              <input type="tel" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+
+            {/* Children section */}
+            <div className="pt-2 border-t border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-1 mt-4">Kinder (optional)</h2>
+              <p className="text-xs text-gray-500 mb-3">Bis zu 3 Kinder eintragen</p>
+
+              {[1, 2, 3].map(idx => (
+                <div key={idx} className="grid md:grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name Kind {idx}</label>
+                    <input type="text" value={form[`nameKind${idx}`]} onChange={e => setField(`nameKind${idx}`, e.target.value)} placeholder={`Vorname Kind ${idx}`} className={inputClass} data-testid={`register-name-kind-${idx}`} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Geburtstag Kind {idx}</label>
+                    <input type="date" value={form[`geburtsdatumKind${idx}`]} onChange={e => setField(`geburtsdatumKind${idx}`, e.target.value)} className={inputClass} data-testid={`register-birthday-kind-${idx}`} />
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
-              <input type="text" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
-            </div>
-            <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-full font-medium transition-all disabled:opacity-50">
+
+            <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-full font-medium transition-all disabled:opacity-50 mt-2" data-testid="register-submit">
               {loading ? "Wird registriert..." : "Mitglied werden"}
             </button>
           </form>
+
           <p className="text-center text-gray-600 mt-6 text-sm">
             Bereits Mitglied? <Link to="/login" className="text-amber-600 underline">Anmelden</Link>
           </p>
@@ -1843,6 +1914,224 @@ const KontaktPage = () => {
   );
 };
 
+// ==================== ADMIN DASHBOARD ====================
+const AdminDashboardPage = () => {
+  const { user, token } = useAuth();
+  const navigate = useNavigate();
+  const [bookings, setBookings] = useState([]);
+  const [stats, setStats] = useState({ pending: 0, confirmed: 0, rejected: 0, total: 0 });
+  const [filter, setFilter] = useState("pending");
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [rejectModal, setRejectModal] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  useEffect(() => {
+    if (!user) { navigate("/login?redirect=/admin"); return; }
+    if (!user.is_admin) { navigate("/"); return; }
+  }, [user, navigate]);
+
+  const loadData = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [bookingsRes, statsRes] = await Promise.all([
+        axios.get(`${API}/admin/bookings?token=${token}${filter ? `&status=${filter}` : ""}`),
+        axios.get(`${API}/admin/stats?token=${token}`)
+      ]);
+      setBookings(bookingsRes.data.bookings || []);
+      setStats(statsRes.data || {});
+    } catch (err) {
+      console.error("Admin load error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, filter]);
+
+  useEffect(() => { if (user?.is_admin) loadData(); }, [loadData, user]);
+
+  const handleApprove = async (id) => {
+    setActionLoading(id);
+    try {
+      await axios.post(`${API}/admin/bookings/${id}/approve?token=${token}`);
+      await loadData();
+    } catch (err) {
+      alert(err.response?.data?.error || "Fehler beim Bestätigen");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectModal) return;
+    setActionLoading(rejectModal);
+    try {
+      await axios.post(`${API}/admin/bookings/${rejectModal}/reject?token=${token}`, { reason: rejectReason });
+      setRejectModal(null);
+      setRejectReason("");
+      await loadData();
+    } catch (err) {
+      alert(err.response?.data?.error || "Fehler beim Ablehnen");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  if (!user?.is_admin) return null;
+
+  const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const statusBadge = (status) => {
+    const cfg = {
+      pending: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Ausstehend' },
+      confirmed: { bg: 'bg-green-100', text: 'text-green-700', label: 'Bestätigt' },
+      rejected: { bg: 'bg-red-100', text: 'text-red-700', label: 'Abgelehnt' }
+    }[status] || { bg: 'bg-gray-100', text: 'text-gray-700', label: status };
+    return <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>;
+  };
+
+  return (
+    <div className="pt-20 min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-sm text-gray-500 mt-1">Externe Buchungsanfragen verwalten</p>
+          </div>
+          <span className="hidden md:inline-flex items-center gap-2 text-sm text-gray-600">
+            <User size={16} className="text-amber-600" />{user.name}
+          </span>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {[
+            { label: "Ausstehend", value: stats.pending, color: "amber", testId: "stat-pending" },
+            { label: "Bestätigt", value: stats.confirmed, color: "green", testId: "stat-confirmed" },
+            { label: "Abgelehnt", value: stats.rejected, color: "red", testId: "stat-rejected" },
+            { label: "Gesamt", value: stats.total, color: "gray", testId: "stat-total" }
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-xl p-5 border border-gray-200" data-testid={s.testId}>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{s.label}</p>
+              <p className={`text-3xl font-bold text-${s.color}-600`}>{s.value || 0}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2 mb-4" data-testid="admin-filters">
+          {[
+            { value: "pending", label: "Ausstehend" },
+            { value: "confirmed", label: "Bestätigt" },
+            { value: "rejected", label: "Abgelehnt" },
+            { value: "", label: "Alle" }
+          ].map(opt => (
+            <button
+              key={opt.value || "all"}
+              onClick={() => setFilter(opt.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${filter === opt.value ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-300'}`}
+              data-testid={`filter-${opt.value || "all"}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Bookings table */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {loading ? (
+            <div className="p-12 text-center text-gray-500">Lädt...</div>
+          ) : bookings.length === 0 ? (
+            <div className="p-12 text-center text-gray-500" data-testid="admin-empty">Keine Buchungen in dieser Kategorie</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
+                    <th className="px-4 py-3">Ref</th>
+                    <th className="px-4 py-3">Datum</th>
+                    <th className="px-4 py-3">Zeit</th>
+                    <th className="px-4 py-3">Kunde</th>
+                    <th className="px-4 py-3">Anlass</th>
+                    <th className="px-4 py-3">Preis</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Aktion</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100" data-testid="admin-bookings-table">
+                  {bookings.map(b => (
+                    <tr key={b.id} className="hover:bg-gray-50" data-testid={`booking-row-${b.id}`}>
+                      <td className="px-4 py-3 text-xs text-gray-500 font-mono">{b.reference_number}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatDate(b.booking_date)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{b.start_time} – {b.end_time} <span className="text-xs text-gray-400">({b.time_block})</span></td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="font-medium text-gray-900">{b.user_name}</div>
+                        <div className="text-xs text-gray-500">{b.user_email}</div>
+                        {b.user_phone && <div className="text-xs text-gray-500">{b.user_phone}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {b.event_type}
+                        <div className="text-xs text-gray-400">{b.expected_guests} Gäste</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">CHF {b.total_price}</td>
+                      <td className="px-4 py-3">{statusBadge(b.status)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {b.status === 'pending' ? (
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => handleApprove(b.id)}
+                              disabled={actionLoading === b.id}
+                              className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-medium rounded-lg transition-all disabled:opacity-50"
+                              data-testid={`approve-btn-${b.id}`}
+                            >
+                              <Check size={14} className="inline mr-1" />Bestätigen
+                            </button>
+                            <button
+                              onClick={() => { setRejectModal(b.id); setRejectReason(""); }}
+                              disabled={actionLoading === b.id}
+                              className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition-all disabled:opacity-50"
+                              data-testid={`reject-btn-${b.id}`}
+                            >
+                              <X size={14} className="inline mr-1" />Ablehnen
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Reject reason modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setRejectModal(null)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl" onClick={e => e.stopPropagation()} data-testid="reject-modal">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Buchung ablehnen</h3>
+            <p className="text-sm text-gray-500 mb-4">Optional: Grund für die Ablehnung angeben</p>
+            <textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              rows="3"
+              placeholder="z.B. Termin bereits vergeben"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none mb-4"
+              data-testid="reject-reason-input"
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setRejectModal(null)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">Abbrechen</button>
+              <button onClick={handleReject} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium" data-testid="confirm-reject-btn">Ablehnen</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ==================== APP ====================
 function App() {
   return (
@@ -1863,6 +2152,7 @@ function App() {
               <Route path="/meine-buchungen" element={<MyBookingsPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/mitglied-werden" element={<RegisterPage />} />
+              <Route path="/admin" element={<AdminDashboardPage />} />
               <Route path="/impressum" element={<div className="pt-20 p-8"><h1 className="text-3xl font-bold">Impressum</h1><p className="mt-4">Elternvereinigung Oberglatt<br/>Dicklooweg, 8154 Oberglatt<br/>info@elternvereinigung.ch</p></div>} />
               <Route path="/datenschutz" element={<div className="pt-20 p-8"><h1 className="text-3xl font-bold">Datenschutz</h1><p className="mt-4">Datenschutzerklärung gemäss Schweizer DSG.</p></div>} />
               <Route path="/agb" element={<div className="pt-20 p-8"><h1 className="text-3xl font-bold">AGB</h1><p className="mt-4">Allgemeine Geschäftsbedingungen der Elternvereinigung Oberglatt.</p></div>} />

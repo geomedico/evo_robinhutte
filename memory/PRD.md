@@ -1,8 +1,8 @@
 # EVO Elternvereinigung Oberglatt - Website Draft
 
 **Project:** Full-stack website for Elternvereinigung Oberglatt
-**Date:** January 2026
-**Status:** MVP Complete ✅
+**Date:** January 2026 (updated Feb 2026)
+**Status:** MVP + Admin Dashboard ✅
 
 ---
 
@@ -30,7 +30,9 @@ Build a functional draft website for EVO (Elternvereinigung Oberglatt) according
 8. **Meine Buchungen** - User's booking history
 9. **Login** - User authentication
 10. **Mitglied werden** - Registration
-11. **Legal pages** - Impressum, Datenschutz, AGB
+11. **Mitglied werden** - Registration (now collects: name, email, password, mobil, adresse, postleitzahl, ort + optional Kind 1-3 name & birthday)
+12. **Admin Dashboard** (`/admin`) - Booking approval/rejection panel with stats, status filters, approve/reject buttons, rejection reason modal
+13. **Legal pages** - Impressum, Datenschutz, AGB
 
 ### Features
 - ✅ **Official EVO Logo** in header and footer
@@ -156,8 +158,21 @@ Build a functional draft website for EVO (Elternvereinigung Oberglatt) according
 
 ---
 
-## Next Steps
-1. Deploy to production or use as Wix reference
-2. Add real images (replace Unsplash placeholders)
-3. Set up email service for notifications
-4. Consider admin dashboard for Vorstand
+## Changelog (Feb 2026)
+- **Backend migrated** from Python/FastAPI → **Node.js/Express** at `/app/backend_node/server.js`
+- **Added family registration fields** (mobil, adresse, postleitzahl, ort + Kind 1-3 name & birthday) on both backend and frontend
+- **4h booking blocks restricted** to Mo-Do only (weekend bookings must use 12h or 24h)
+- **Member pricing hidden** from non-logged-in users (guests see external prices only)
+- **Admin Dashboard added** at `/admin`:
+  - Auto-seeded admin: `admin@elternvereinigung.ch` / `admin123`
+  - Stats cards: pending / confirmed / rejected / total
+  - Status filter pills, bookings table
+  - Approve / Reject buttons with optional rejection reason modal
+  - New endpoints: `/api/admin/stats`, `/api/admin/bookings`, `/api/admin/bookings/:id/approve|reject`
+
+## Next Steps / Backlog (P2)
+- Email confirmation on successful booking + on approve/reject (needs email integration: Resend or SendGrid)
+- Waitlist feature for fully-booked calendar days
+- Dynamic admin controls for pricing, buffer times, holiday list
+- Replace Unsplash placeholders with real EVO photos
+- Wix migration once content is finalized

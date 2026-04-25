@@ -216,6 +216,7 @@ async function getCurrentUser(token) {
         name: user.name,
         email: user.email,
         is_member: user.is_member || false,
+        is_admin: user.is_admin || false,
         phone: user.phone,
         address: user.address
       };
@@ -223,6 +224,45 @@ async function getCurrentUser(token) {
     return null;
   } catch (error) {
     return null;
+  }
+}
+
+// Admin authentication middleware
+async function requireAdmin(req, res, next) {
+  const token = req.query.token || req.body.token || req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Nicht autorisiert' });
+  }
+  const user = await getCurrentUser(token);
+  if (!user || !user.is_admin) {
+    return res.status(403).json({ error: 'Admin-Berechtigung erforderlich' });
+  }
+  req.adminUser = user;
+  next();
+}
+
+// Seed admin user on startup
+async function seedAdmin() {
+  const adminEmail = 'admin@elternvereinigung.ch';
+  const existing = await db.collection('users').findOne({ email: adminEmail });
+  if (!existing) {
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    await db.collection('users').insertOne({
+      name: 'EVO Admin',
+      email: adminEmail,
+      password: hashedPassword,
+      is_member: true,
+      is_admin: true,
+      created_at: new Date().toISOString()
+    });
+    console.log('✅ Admin user seeded:', adminEmail);
+  } else if (!existing.is_admin) {
+    // Promote existing user to admin if needed
+    await db.collection('users').updateOne(
+      { email: adminEmail },
+      { $set: { is_admin: true } }
+    );
+    console.log('✅ Admin role applied to existing user:', adminEmail);
   }
 }
 
@@ -331,7 +371,8 @@ app.post('/api/auth/login', [
         id: user._id.toString(),
         name: user.name,
         email: user.email,
-        is_member: user.is_member || false
+        is_member: user.is_member || false,
+        is_admin: user.is_admin || false
       }
     });
   } catch (error) {
@@ -815,6 +856,119 @@ app.get('/api/pricing', async (req, res) => {
   }
 });
 
+// ==================== ADMIN ROUTES ====================
+
+// List all bookings (admin) — with optional status filter
+app.get('/api/admin/bookings', requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const query = status ? { status } : {};
+    const bookings = await db.collection('bookings')
+      .find(query)
+      .sort({ created_at: -1 })
+      .toArray();
+
+    const formatted = bookings.map(b => ({
+      ...b,
+      id: b._id.toString(),
+      _id: undefined
+    }));
+
+    res.json({ bookings: formatted, count: formatted.length });
+  } catch (error) {
+    console.error('Admin list bookings error:', error);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// Get admin stats
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+  try {
+    const [pending, confirmed, rejected, total] = await Promise.all([
+      db.collection('bookings').countDocuments({ status: 'pending' }),
+      db.collection('bookings').countDocuments({ status: 'confirmed' }),
+      db.collection('bookings').countDocuments({ status: 'rejected' }),
+      db.collection('bookings').countDocuments({})
+    ]);
+    res.json({ pending, confirmed, rejected, total });
+  } catch (error) {
+    console.error('Admin stats error:', error);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// Approve booking
+app.post('/api/admin/bookings/:id/approve', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Ungültige Buchungs-ID' });
+    }
+
+    const result = await db.collection('bookings').findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          status: 'confirmed',
+          approved_at: new Date().toISOString(),
+          approved_by: req.adminUser.email
+        }
+      },
+      { returnDocument: 'after' }
+    );
+
+    const booking = result.value || result;
+    if (!booking) {
+      return res.status(404).json({ error: 'Buchung nicht gefunden' });
+    }
+
+    res.json({
+      message: 'Buchung bestätigt',
+      booking: { ...booking, id: booking._id.toString(), _id: undefined }
+    });
+  } catch (error) {
+    console.error('Approve booking error:', error);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// Reject booking
+app.post('/api/admin/bookings/:id/reject', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Ungültige Buchungs-ID' });
+    }
+
+    const result = await db.collection('bookings').findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          status: 'rejected',
+          rejected_at: new Date().toISOString(),
+          rejected_by: req.adminUser.email,
+          rejection_reason: reason || null
+        }
+      },
+      { returnDocument: 'after' }
+    );
+
+    const booking = result.value || result;
+    if (!booking) {
+      return res.status(404).json({ error: 'Buchung nicht gefunden' });
+    }
+
+    res.json({
+      message: 'Buchung abgelehnt',
+      booking: { ...booking, id: booking._id.toString(), _id: undefined }
+    });
+  } catch (error) {
+    console.error('Reject booking error:', error);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
 // ==================== CONTACT ROUTES ====================
 
 // Contact form
@@ -895,6 +1049,9 @@ async function startServer() {
     await client.connect();
     db = client.db(DB_NAME);
     console.log('✅ Connected to MongoDB');
+
+    // Seed admin user
+    await seedAdmin();
 
     // Start Express server
     app.listen(PORT, '0.0.0.0', () => {
